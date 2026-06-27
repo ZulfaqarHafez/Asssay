@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -30,8 +32,10 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
-  letter-spacing: 0;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body > div:first-child:empty {
@@ -147,9 +151,9 @@ select {
 }
 
 .command-button.primary {
-  background: var(--ink);
+  background: var(--teal);
   color: #fff;
-  border-color: var(--ink);
+  border-color: var(--teal);
 }
 
 .command-button:disabled {
@@ -164,8 +168,24 @@ select {
 }
 
 .command-button.primary:hover:not(:disabled) {
-  background: #2b302c;
+  background: #20655c;
   color: #fff;
+}
+
+:where(button, a, input, select, textarea, summary, .ledger-row):focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(45, 125, 115, 0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .arena {

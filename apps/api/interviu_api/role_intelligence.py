@@ -102,9 +102,11 @@ _COMPETENCY_RULES: list[dict[str, Any]] = [
 _PROTECTED_SIGNALS: dict[str, list[str]] = {
     "age": ["age", "young", "energetic", "digital native"],
     "national_origin": ["native speaker", "accent", "local candidate"],
-    "family_status": ["childcare", "parental", "maternity", "family plans"],
+    "family_status": ["childcare", "parental", "maternity", "family plans", "pregnant", "pregnancy"],
     "disability": ["able-bodied", "no accommodation"],
-    "religion": ["religion", "faith"],
+    "religion": ["religion", "religious", "faith"],
+    "sex": ["gender", "sexual orientation"],
+    "race": ["race", "ethnicity", "ethnic"],
 }
 
 _SENIORITY_RULES: dict[str, list[str]] = {
