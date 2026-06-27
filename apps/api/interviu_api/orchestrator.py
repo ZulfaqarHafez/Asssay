@@ -266,6 +266,12 @@ class RunOrchestrator:
         )
         return save_event(event)
 
+    # Cap recorded step content well above the prior 500-char limit so the
+    # TraceRazor audit sees the candidate's real reasoning plus a substantive
+    # slice of the answer instead of a truncated placeholder. Kept bounded so
+    # very long answers do not bloat the trace payload sent to the auditor.
+    _STEP_CONTENT_CAP = 1200
+
     def _record_reasoning_step(
         self,
         candidate: CandidateConfig,
@@ -280,8 +286,8 @@ class RunOrchestrator:
             {
                 "id": self._trace_step_id,
                 "type": "reasoning",
-                "content": response.reasoning[:500] or response.answer[:500],
-                "tokens": max(response.tokens.total, 1),
+                "content": self._reasoning_content(response),
+                "tokens": self._step_tokens(response.tokens.total, response.answer, response.reasoning),
                 "input_context": question,
                 "output": response.answer,
                 "agent_id": candidate.id,
@@ -292,21 +298,67 @@ class RunOrchestrator:
 
     def _record_tool_step(self, tool: dict[str, Any], question: str) -> int:
         self._trace_step_id += 1
+        name = tool.get("name", "tool")
+        params = tool.get("params") or {}
+        output = tool.get("output")
         self._trace_steps.append(
             {
                 "id": self._trace_step_id,
                 "type": "tool_call",
-                "content": f"Calling {tool.get('name', 'tool')}",
-                "tokens": max(int(tool.get("tokens") or 1), 1),
+                "content": self._tool_content(name, params, output),
+                "tokens": self._step_tokens(tool.get("tokens"), str(output or ""), str(params)),
                 "tool_name": tool.get("name"),
-                "tool_params": tool.get("params") or {},
+                "tool_params": params,
                 "tool_success": bool(tool.get("success", True)),
                 "tool_error": tool.get("error"),
                 "input_context": question,
-                "output": tool.get("output"),
+                "output": output,
             }
         )
         return self._trace_step_id
+
+    def _reasoning_content(self, response: CandidateResponse) -> str:
+        """Build a faithful, information-rich step body.
+
+        Combine the candidate's reasoning with a slice of the answer so the
+        audit never sees an empty/placeholder step. Falls back gracefully when
+        only one of the two is present.
+        """
+        reasoning = (response.reasoning or "").strip()
+        answer = (response.answer or "").strip()
+        parts: list[str] = []
+        if reasoning:
+            parts.append(f"Reasoning: {reasoning}")
+        if answer:
+            parts.append(f"Answer: {answer}")
+        content = "\n".join(parts) if parts else "(no content reported)"
+        return content[: self._STEP_CONTENT_CAP]
+
+    def _tool_content(self, name: str, params: dict[str, Any], output: Any) -> str:
+        content = f"Calling {name}"
+        if params:
+            content += f" with {params}"
+        if output:
+            content += f" -> {output}"
+        return content[: self._STEP_CONTENT_CAP]
+
+    @staticmethod
+    def _step_tokens(reported: Any, *text_fields: str) -> int:
+        """Return a faithful per-step token count.
+
+        Prefer the real count an adapter reports (mock and HTTP candidates both
+        emit genuine counts). Only fall back to a deterministic ~4-chars/token
+        estimate over the step's own text when no real count exists, so a step
+        is never collapsed to the misleading ``tokens=1`` placeholder.
+        """
+        try:
+            real = int(reported) if reported is not None else 0
+        except (TypeError, ValueError):
+            real = 0
+        if real > 0:
+            return real
+        estimate = sum(len(field or "") for field in text_fields) // 4
+        return max(estimate, 1)
 
     @staticmethod
     def _context(candidate: CandidateConfig, lessons: list[str], run: RunRecord | None = None) -> str:

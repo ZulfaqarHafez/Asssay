@@ -29,3 +29,91 @@ example `candidate-shield` for an untrusted-input firewall, `candidate-lock` for
 a privacy steward, `tracerazor` for the Trace Auditor) and the web app renders it
 as `sprite-<suffix>`. Readiness verdicts use `candidate-approved`,
 `candidate-question`, and `candidate-review`.
+
+## Additional Sheets: Judging / Lessons / Runs
+
+Beyond the 9×5 `dojo` sheet, Interviu ships three single-row companion sheets,
+each a deterministic 9×1 (288×32) SVG plus a sibling JSON manifest under
+`apps/web/public/sprites/`. They keep the dojo sheet focused on characters while
+giving runtime state its own glyphs.
+
+### `interviu-judging-sprites` (grader panel state)
+
+| Tile | Manifest key | CSS class |
+| --- | --- | --- |
+| Grader deliberating | `graderDeliberating` | `sprite-grader-deliberating` |
+| Grader approve | `graderApprove` | `sprite-grader-approve` |
+| Grader reject | `graderReject` | `sprite-grader-reject` |
+| Gavel | `gavel` | `sprite-gavel` |
+| Score meter (low) | `scoreMeterLow` | `sprite-score-meter-low` |
+| Score meter (mid) | `scoreMeterMid` | `sprite-score-meter-mid` |
+| Score meter (high) | `scoreMeterHigh` | `sprite-score-meter-high` |
+| Grader disagreement | `graderDisagreement` | `sprite-grader-disagreement` |
+| Verdict sealed | `verdictSealed` | `sprite-verdict-sealed` |
+
+### `interviu-lessons-sprites` (lesson library growth)
+
+| Tile | Manifest key | CSS class |
+| --- | --- | --- |
+| Lesson scroll | `lessonScroll` | `sprite-lesson-scroll` |
+| Lesson book | `lessonBook` | `sprite-lesson-book` |
+| New lesson stamp | `newLessonStamp` | `sprite-new-lesson-stamp` |
+| Library empty | `libraryEmpty` | `sprite-library-empty` |
+| Library few | `libraryFew` | `sprite-library-few` |
+| Library many | `libraryMany` | `sprite-library-many` |
+| Lesson applied | `lessonApplied` | `sprite-lesson-applied` |
+| Lesson pinned | `lessonPinned` | `sprite-lesson-pinned` |
+
+### `interviu-runs-sprites` (run status / timeline)
+
+| Tile | Manifest key | CSS class |
+| --- | --- | --- |
+| Run queued | `runQueued` | `sprite-run-queued` |
+| Run running | `runRunning` | `sprite-run-running` |
+| Seen trial | `seenTrial` | `sprite-seen-trial` |
+| Held-out trial | `heldOutTrial` | `sprite-held-out-trial` |
+| Pass bead | `passBead` | `sprite-pass-bead` |
+| Fail bead | `failBead` | `sprite-fail-bead` |
+| Run complete | `runComplete` | `sprite-run-complete` |
+| Current phase marker | `currentPhaseMarker` | `sprite-current-phase-marker` |
+| Timeline node | `timelineNode` | `sprite-timeline-node` |
+
+### CSS model
+
+These sheets use the same `.sprite-sheet` base, which now drives
+`background-size` from CSS variables instead of a fixed pixel size:
+
+- `.sprite-sheet` reads `--sprite-cols`, `--sprite-rows`, `--sprite-x`,
+  `--sprite-y`, and `--sprite-scale`; `background-size` is computed as
+  `32px * cols * scale` by `32px * rows * scale`, and `background-position` from
+  `--sprite-x` / `--sprite-y`. This makes any sheet shape work without editing the
+  base rule.
+- A `.sheet-<name>` class swaps in the sheet and its grid:
+  `.sheet-judging`, `.sheet-lessons`, and `.sheet-runs` each set
+  `--sprite-sheet-url` and `--sprite-cols: 9; --sprite-rows: 1;`. The default
+  (dojo) base stays at `9×5`.
+- Usage is `class="sprite-sheet sheet-<name> sprite-<kebab-name>"`, e.g.
+  `sprite-sheet sheet-runs sprite-pass-bead`.
+
+### How the UI uses them
+
+`apps/web/src/app/page.tsx` selects tiles by run state:
+
+- **Roster judge verdict** — the Judge panel roster slot draws from
+  `.sheet-judging`: `grader-deliberating` while a run is in flight,
+  `grader-approve` when the scorecard is certified, and `grader-reject`
+  otherwise.
+- **Lessons library growth** — the Lessons roster slot draws from
+  `.sheet-lessons`: `new-lesson-stamp` while running, then `library-empty` /
+  `library-few` / `library-many` based on how many lessons were kept.
+- **Recent-runs status glyph** — each item in the runs list renders a
+  `.sheet-runs` mini-sprite via `runSprite(status)`: `run-running`,
+  `run-complete`, `fail-bead` (failed), or `run-queued`.
+
+### Extending / regenerating
+
+Use the `sprite-generator` skill (`.claude/skills/sprite-generator/SKILL.md`) to
+add tiles, add a whole new sheet, or regenerate a sheet. It documents the SVG
+conventions, the palette classes, the manifest shape, and the four-step wiring
+(SVG cell → JSON manifest → `.sheet-*` rows bump if needed → `.sprite-*` tile
+class), and reminds you to keep this doc updated.

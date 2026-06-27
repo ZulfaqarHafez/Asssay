@@ -17,7 +17,7 @@ import {
   X
 } from "lucide-react";
 import { interviuApi } from "@/lib/api";
-import type { AgentResearch, AgentSpec, CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, ProofBundle, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
+import type { AgentResearch, AgentSpec, CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, JobScope, ProofBundle, RoleAnalysis, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
 
 type LoadState = "idle" | "loading" | "running" | "complete" | "error";
 
@@ -45,6 +45,9 @@ export default function Home() {
   const [agentExport, setAgentExport] = useState<{ run_id: string; directory: string; sub_agent_count: number } | null>(null);
   const [agentResearch, setAgentResearch] = useState<AgentResearch | null>(null);
   const [researchBusy, setResearchBusy] = useState<"fast" | "deep" | null>(null);
+  const [jobScopeText, setJobScopeText] = useState("");
+  const [roleAnalysis, setRoleAnalysis] = useState<RoleAnalysis | null>(null);
+  const [roleBusy, setRoleBusy] = useState(false);
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -218,7 +221,8 @@ export default function Home() {
           metadata: { source: "web" }
         }));
       setCandidate(activeCandidate);
-      const createdRun = await interviuApi.createRun(activeCandidate.id, selectedExamPack?.id ?? "hr-v1");
+      const jobScope = jobScopeText.trim() ? buildJobScope(jobScopeText.trim()) : null;
+      const createdRun = await interviuApi.createRun(activeCandidate.id, selectedExamPack?.id ?? "hr-v1", jobScope);
       setRun(createdRun);
       const result = await interviuApi.startRun(createdRun.id);
       setScorecard(result);
@@ -233,6 +237,7 @@ export default function Home() {
       setTrace(tracePayload);
       setProofBundle(bundlePayload);
       setAgentSpec(bundlePayload.agent_spec ?? null);
+      setRoleAnalysis(bundlePayload.role_analysis ?? null);
       setRecentRuns(runsPayload);
       setState("complete");
     } catch (exc) {
@@ -262,6 +267,7 @@ export default function Home() {
       setTrace(tracePayload);
       setProofBundle(bundlePayload);
       setAgentSpec(bundlePayload.agent_spec ?? null);
+      setRoleAnalysis(bundlePayload.role_analysis ?? null);
       setAgentExport(null);
       setAgentResearch(null);
       setDrawerOpen(true);
@@ -291,6 +297,7 @@ export default function Home() {
         setTrace(tracePayload);
         setProofBundle(bundlePayload);
         setAgentSpec(bundlePayload.agent_spec ?? null);
+        setRoleAnalysis(bundlePayload.role_analysis ?? null);
       } catch (exc) {
         setError(errorMessage(exc));
       }
@@ -345,6 +352,22 @@ export default function Home() {
       setError(errorMessage(exc));
     } finally {
       setResearchBusy(null);
+    }
+  }
+
+  async function analyzeRole() {
+    setError(null);
+    setRoleBusy(true);
+    try {
+      const analysis = await interviuApi.roleAnalysis(jobScopeText.trim());
+      setRoleAnalysis(analysis);
+      if (analysis.recommended_exam_pack_id && examPacks.some((pack) => pack.id === analysis.recommended_exam_pack_id)) {
+        setSelectedExamPackId(analysis.recommended_exam_pack_id);
+      }
+    } catch (exc) {
+      setError(errorMessage(exc));
+    } finally {
+      setRoleBusy(false);
     }
   }
 
@@ -501,6 +524,20 @@ export default function Home() {
               ))}
             </select>
           </label>
+          <label className="field-row">
+            <span>Job scope</span>
+            <textarea
+              className="job-scope-input"
+              value={jobScopeText}
+              onChange={(event) => setJobScopeText(event.target.value)}
+              placeholder="Paste a role/job scope — e.g. 'Screen and rank candidates fairly; parse resume uploads; handle SSNs and medical notes.'"
+              rows={3}
+            />
+          </label>
+          <button className="command-button" type="button" onClick={analyzeRole} disabled={roleBusy || !jobScopeText.trim()}>
+            <Sparkles size={16} />
+            {roleBusy ? "Analyzing…" : "Analyze role"}
+          </button>
           <details
             className="setup-details"
             open={httpCandidateOpen}
@@ -548,6 +585,60 @@ export default function Home() {
               </button>
             </form>
           </details>
+        </section>
+
+        <section className="panel-section">
+          <h2 className="section-title">Decision logic</h2>
+          {roleAnalysis ? (
+            <>
+              <p className="refinery-headline">
+                Role needs <strong>{roleAnalysis.requirements.length}</strong> competenc{roleAnalysis.requirements.length === 1 ? "y" : "ies"} ·
+                pack <strong>{roleAnalysis.recommended_exam_pack_id}</strong>
+                {roleAnalysis.supplemental_pack_ids.length ? ` (+${roleAnalysis.supplemental_pack_ids.join(", ")})` : ""} ·{" "}
+                <span className="pill ready">{roleAnalysis.extraction_status}</span>
+              </p>
+              {roleAnalysis.requirements.map((req) => (
+                <div className="decision-row" key={req.competency}>
+                  <div className="decision-head">
+                    <strong>{labelize(req.competency)}</strong>
+                    <span className={`pill ${req.priority === "recommended" ? "ready" : "planned"}`}>
+                      {req.priority === "recommended" ? "required" : "optional"}
+                    </span>
+                    {!req.covered_by_pack && <span className="pill warn">not tested</span>}
+                  </div>
+                  <p>{req.rationale}</p>
+                  {req.sources.length > 0 && (
+                    <div className="decision-sources">
+                      {req.sources.slice(0, 3).map((source, index) => (
+                        <em key={`${index}-${source.phrase}`}>&ldquo;{source.phrase}&rdquo;</em>
+                      ))}
+                    </div>
+                  )}
+                  <small className="decision-meta">
+                    {req.expected_check_ids.length} check{req.expected_check_ids.length === 1 ? "" : "s"}
+                    {req.recommended_subagent_id ? ` · ${req.recommended_subagent_id}` : ""}
+                  </small>
+                </div>
+              ))}
+              {roleAnalysis.compliance_notes.length > 0 && (
+                <div className="failure-row">
+                  <strong>Compliance guard:</strong>
+                  <ul className="decision-compliance">
+                    {roleAnalysis.compliance_notes.map((note, index) => (
+                      <li key={`${index}-${note}`}>{note}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {roleAnalysis.uncovered_competencies.length > 0 && (
+                <p className="refinery-note">Not yet tested: {roleAnalysis.uncovered_competencies.join(", ")}</p>
+              )}
+            </>
+          ) : (
+            <p className="refinery-note">
+              Add a job scope above and click &ldquo;Analyze role&rdquo; to see which competencies, checks, and sub-agents the role needs &mdash; and why.
+            </p>
+          )}
         </section>
 
         <section className="panel-section">
@@ -1173,6 +1264,22 @@ function runSprite(status: string): string {
   if (status === "completed") return "run-complete";
   if (status === "failed") return "fail-bead";
   return "run-queued";
+}
+
+function buildJobScope(text: string): JobScope {
+  return {
+    raw_text: text,
+    title: "",
+    seniority: "unspecified",
+    responsibilities: [],
+    required_skills: [],
+    nice_to_have: [],
+    qualifications: [],
+    domain: "",
+    risks: [],
+    compliance_flags: [],
+    extraction: "none"
+  };
 }
 
 function traceRosterMeta(scorecard: Scorecard | null) {

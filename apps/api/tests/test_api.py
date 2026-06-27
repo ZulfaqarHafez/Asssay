@@ -3,9 +3,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from interviu_api.main import app
+
+
+@pytest.fixture(autouse=True)
+def _local_sqlite_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep API tests on the isolated sqlite store.
+
+    The ``isolated_db`` conftest fixture clears Supabase env vars, but the app's
+    startup hook calls ``load_local_env`` which would re-populate them from a
+    developer's local ``.env`` and silently swap the backend to Supabase. Neutralize
+    that load so persistence stays on the temp sqlite database for every test here.
+    """
+    monkeypatch.setattr("interviu_api.main.load_local_env", lambda: None)
 
 
 def test_demo_run_completes_with_scorecard(monkeypatch) -> None:
@@ -206,9 +219,6 @@ def test_role_analysis_keyword_endpoint() -> None:
 
 
 def test_run_round_trips_job_scope_and_proof_bundle(monkeypatch) -> None:
-    # Force the local sqlite store so the round-trip does not depend on the
-    # developer's .env (which may point persistence at Supabase).
-    monkeypatch.setattr("interviu_api.main.load_local_env", lambda: None)
     monkeypatch.setattr("interviu_api.orchestrator.TraceAuditService", _RoleFakeAudit)
 
     job_scope = {

@@ -60,6 +60,8 @@ npm --workspace apps/web run test
 
 - The first screen is the evaluation workspace with run setup, score, proof, a candidate room, and the agent panel.
 - The arena spawns the full interview cast as pixel sprites — examiner, judge panel, lesson library, TraceRazor auditor, and simulator — that activate during a run alongside the candidate.
+- A free-text job scope can be turned into decision logic: role analysis deterministically maps job-scope phrases to competencies, expected checks, and recommended sub-agents with a traceable evidence chain, picks the exam pack, and flags protected-attribute language as compliance notes only (never requirements). Available via `POST /role-analysis`, `GET /runs/{run_id}/role-analysis`, and embedded in the proof bundle; details are in [docs/role-intelligence.md](docs/role-intelligence.md).
+- The pixel sprite system now spans four sheets — the `dojo` character sheet plus dedicated `judging`, `lessons`, and `runs` state sheets that drive the roster judge verdict, lessons-library growth, and recent-runs status glyphs — and is extended or regenerated through the `sprite-generator` skill; details are in [docs/sprites.md](docs/sprites.md).
 - Advanced details such as exam export, previous runs, connector probes, and trace spans stay collapsed until needed.
 - HTTP candidates can be registered from the web app and use the same examiner, scoring, persistence, and TraceRazor path as mock candidates.
 - The Agent Refinery turns each run into a refined `AGENTS.md` for the candidate plus grounded sub-agent recommendations; details are in [docs/agent-refinery.md](docs/agent-refinery.md).

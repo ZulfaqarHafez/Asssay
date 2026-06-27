@@ -82,6 +82,7 @@ export type RunRecord = {
   error?: string | null;
   created_at?: string;
   updated_at?: string;
+  job_scope?: JobScope | null;
 };
 
 export type RunEvent = {
@@ -200,6 +201,54 @@ export type AgentResearch = {
   generated_at: string;
 };
 
+export type Seniority = "intern" | "junior" | "mid" | "senior" | "lead" | "executive" | "unspecified";
+
+export type JobScope = {
+  raw_text: string;
+  title: string;
+  seniority: Seniority;
+  responsibilities: string[];
+  required_skills: string[];
+  nice_to_have: string[];
+  qualifications: string[];
+  domain: string;
+  risks: string[];
+  compliance_flags: string[];
+  extraction: "none" | "keyword" | "openai-fast" | "openai-deep";
+};
+
+export type RequirementSource = {
+  phrase: string;
+  field: string;
+  rule_id: string;
+  weight: number;
+};
+
+export type CompetencyRequirement = {
+  competency: string;
+  label: string;
+  rationale: string;
+  sources: RequirementSource[];
+  expected_check_ids: string[];
+  recommended_subagent_id: string | null;
+  priority: "recommended" | "optional";
+  covered_by_pack: string | null;
+};
+
+export type RoleAnalysis = {
+  schema: "interviu.role_analysis.v1";
+  job_scope: JobScope;
+  recommended_exam_pack_id: string;
+  supplemental_pack_ids: string[];
+  requirements: CompetencyRequirement[];
+  recommended_subagents: SubAgentSpec[];
+  uncovered_competencies: string[];
+  compliance_notes: string[];
+  extraction_status: "keyword" | "openai-fast" | "openai-deep" | "unavailable" | "error";
+  sources: AgentResearchSource[];
+  generated_at: string;
+};
+
 export type DatabaseHealth = {
   backend: string;
   ok: boolean;
@@ -227,4 +276,5 @@ export type ProofBundle = {
   connectors: Connector[];
   connector_probes: ConnectorProbe[];
   agent_spec: AgentSpec | null;
+  role_analysis?: RoleAnalysis | null;
 };

@@ -634,6 +634,76 @@ select {
   overflow-wrap: anywhere;
 }
 
+.job-scope-input {
+  min-height: 64px;
+  border: 1px solid rgba(31, 35, 32, 0.2);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px;
+  text-transform: none;
+  font-weight: 600;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.decision-row {
+  border: 1px solid rgba(31, 35, 32, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 8px 0;
+  background: #fff;
+}
+
+.decision-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.decision-head strong {
+  font-size: 13px;
+}
+
+.decision-row p {
+  margin: 6px 0;
+  font-size: 11px;
+  color: #34302d;
+  line-height: 1.35;
+}
+
+.decision-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.decision-sources em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--soft);
+  border-radius: 6px;
+  padding: 1px 6px;
+  overflow-wrap: anywhere;
+}
+
+.decision-meta {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.decision-compliance {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .seat {
   position: absolute;
   width: 130px;

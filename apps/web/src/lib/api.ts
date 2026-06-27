@@ -1,4 +1,4 @@
-import type { AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, ProofBundle, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
+import type { AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, JobScope, ProofBundle, RoleAnalysis, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
 
 function apiBaseUrl() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
@@ -47,10 +47,10 @@ export const interviuApi = {
       method: "POST",
       body: JSON.stringify(candidate)
     }),
-  createRun: (candidateId: string, examPackId = "hr-v1") =>
+  createRun: (candidateId: string, examPackId = "hr-v1", jobScope: JobScope | null = null) =>
     request<RunRecord>("/runs", {
       method: "POST",
-      body: JSON.stringify({ candidate_id: candidateId, exam_pack_id: examPackId })
+      body: JSON.stringify({ candidate_id: candidateId, exam_pack_id: examPackId, job_scope: jobScope })
     }),
   startRun: (runId: string) =>
     request<Scorecard>(`/runs/${runId}/start`, {
@@ -68,5 +68,11 @@ export const interviuApi = {
   agentResearch: (runId: string, mode: "fast" | "deep") =>
     request<AgentResearch>(`/runs/${runId}/agent-spec/research?mode=${mode}`, {
       method: "POST"
-    })
+    }),
+  roleAnalysis: (rawText: string, extract: "keyword" | "openai-fast" | "openai-deep" = "keyword", overridePackId: string | null = null) =>
+    request<RoleAnalysis>("/role-analysis", {
+      method: "POST",
+      body: JSON.stringify({ raw_text: rawText, extract, override_pack_id: overridePackId })
+    }),
+  runRoleAnalysis: (runId: string) => request<RoleAnalysis>(`/runs/${runId}/role-analysis`)
 };
