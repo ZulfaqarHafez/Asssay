@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="32" viewBox="0 0 288 32" shape-rendering="crispEdges">
+  <rect width="288" height="32" fill="#fbfaf7"/>
+  <defs>
+    <style>
+      .k{fill:#2b2724}.w{fill:#fff}.t{fill:#1f9e9a}.g{fill:#76a84f}.r{fill:#e25b45}.y{fill:#e8ae2e}.v{fill:#725ac1}.m{fill:#6e6760}.b{fill:#4f86d9}
+    </style>
+  </defs>
+
+  <!-- runQueued -->
+  <g transform="translate(0 0)">
+    <rect class="k" x="8" y="4" width="16" height="2"/><rect class="k" x="8" y="26" width="16" height="2"/>
+    <rect class="k" x="9" y="6" width="2" height="2"/><rect class="k" x="21" y="6" width="2" height="2"/>
+    <rect class="k" x="11" y="8" width="2" height="2"/><rect class="k" x="19" y="8" width="2" height="2"/>
+    <rect class="k" x="13" y="10" width="2" height="2"/><rect class="k" x="17" y="10" width="2" height="2"/>
+    <rect class="k" x="15" y="12" width="2" height="2"/>
+    <rect class="k" x="15" y="14" width="2" height="2"/>
+    <rect class="k" x="13" y="16" width="2" height="2"/><rect class="k" x="17" y="16" width="2" height="2"/>
+    <rect class="k" x="11" y="18" width="2" height="2"/><rect class="k" x="19" y="18" width="2" height="2"/>
+    <rect class="k" x="9" y="20" width="2" height="2"/><rect class="k" x="21" y="20" width="2" height="2"/>
+    <rect class="y" x="11" y="20" width="10" height="6"/>
+    <rect class="m" x="13" y="14" width="6" height="2"/>
+    <rect class="w" x="14" y="22" width="2" height="2"/>
+  </g>
+
+  <!-- runRunning -->
+  <g transform="translate(32 0)">
+    <rect class="k" x="11" y="6" width="10" height="2"/><rect class="k" x="11" y="24" width="10" height="2"/>
+    <rect class="k" x="7" y="10" width="2" height="12"/><rect class="k" x="23" y="10" width="2" height="12"/>
+    <rect class="k" x="9" y="8" width="2" height="2"/><rect class="k" x="21" y="8" width="2" height="2"/>
+    <rect class="k" x="9" y="22" width="2" height="2"/><rect class="k" x="21" y="22" width="2" height="2"/>
+    <rect class="t" x="13" y="11" width="2" height="10"/>
+    <rect class="t" x="15" y="13" width="2" height="6"/>
+    <rect class="t" x="17" y="15" width="2" height="2"/>
+    <rect class="t" x="26" y="12" width="4" height="3"/>
+    <rect class="t" x="26" y="18" width="4" height="3"/>
+    <rect class="w" x="13" y="11" width="2" height="2"/>
+  </g>
+
+  <!-- seenTrial -->
+  <g transform="translate(64 0)">
+    <rect class="k" x="9" y="14" width="2" height="2"/><rect class="k" x="21" y="14" width="2" height="2"/>
+    <rect class="k" x="11" y="12" width="2" height="2"/><rect class="k" x="19" y="12" width="2" height="2"/>
+    <rect class="k" x="13" y="10" width="6" height="2"/>
+    <rect class="k" x="11" y="18" width="2" height="2"/><rect class="k" x="19" y="18" width="2" height="2"/>
+    <rect class="k" x="13" y="20" width="6" height="2"/>
+    <rect class="w" x="11" y="14" width="10" height="4"/>
+    <rect class="t" x="13" y="13" width="6" height="6"/>
+    <rect class="k" x="15" y="15" width="2" height="2"/>
+    <rect class="w" x="13" y="13" width="2" height="2"/>
+  </g>
+
+  <!-- heldOutTrial -->
+  <g transform="translate(96 0)">
+    <rect class="k" x="9" y="14" width="2" height="2"/><rect class="k" x="21" y="14" width="2" height="2"/>
+    <rect class="k" x="11" y="12" width="2" height="2"/><rect class="k" x="19" y="12" width="2" height="2"/>
+    <rect class="k" x="13" y="10" width="6" height="2"/>
+    <rect class="k" x="11" y="18" width="2" height="2"/><rect class="k" x="19" y="18" width="2" height="2"/>
+    <rect class="k" x="13" y="20" width="6" height="2"/>
+    <rect class="w" x="11" y="14" width="10" height="4"/>
+    <rect class="t" x="13" y="14" width="4" height="3"/>
+    <rect class="v" x="9" y="6" width="14" height="8"/>
+    <rect class="k" x="9" y="6" width="14" height="2"/>
+    <rect class="m" x="11" y="14" width="2" height="2"/><rect class="m" x="15" y="14" width="2" height="2"/><rect class="m" x="19" y="14" width="2" height="2"/>
+    <rect class="w" x="11" y="8" width="2" height="2"/>
+  </g>
+
+  <!-- passBead -->
+  <g transform="translate(128 0)">
+    <rect class="k" x="12" y="8" width="8" height="2"/><rect class="k" x="12" y="22" width="8" height="2"/>
+    <rect class="k" x="10" y="10" width="2" height="12"/><rect class="k" x="20" y="10" width="2" height="12"/>
+    <rect class="g" x="12" y="10" width="8" height="12"/>
+    <rect class="w" x="13" y="15" width="2" height="2"/>
+    <rect class="w" x="15" y="17" width="2" height="2"/>
+    <rect class="w" x="17" y="13" width="2" height="2"/>
+    <rect class="w" x="16" y="15" width="2" height="2"/>
+    <rect class="w" x="12" y="11" width="2" height="2"/>
+  </g>
+
+  <!-- failBead -->
+  <g transform="translate(160 0)">
+    <rect class="k" x="12" y="8" width="8" height="2"/><rect class="k" x="12" y="22" width="8" height="2"/>
+    <rect class="k" x="10" y="10" width="2" height="12"/><rect class="k" x="20" y="10" width="2" height="12"/>
+    <rect class="r" x="12" y="10" width="8" height="12"/>
+    <rect class="w" x="13" y="13" width="2" height="2"/><rect class="w" x="17" y="13" width="2" height="2"/>
+    <rect class="w" x="15" y="15" width="2" height="2"/>
+    <rect class="w" x="13" y="17" width="2" height="2"/><rect class="w" x="17" y="17" width="2" height="2"/>
+    <rect class="w" x="12" y="11" width="2" height="2"/>
+  </g>
+
+  <!-- runComplete -->
+  <g transform="translate(192 0)">
+    <rect class="m" x="8" y="26" width="16" height="3"/>
+    <rect class="k" x="11" y="4" width="2" height="24"/>
+    <rect class="k" x="13" y="6" width="12" height="2"/><rect class="k" x="13" y="16" width="12" height="2"/>
+    <rect class="k" x="23" y="8" width="2" height="8"/>
+    <rect class="g" x="13" y="8" width="10" height="8"/>
+    <rect class="w" x="13" y="8" width="4" height="4"/>
+    <rect class="w" x="17" y="12" width="4" height="4"/>
+  </g>
+
+  <!-- currentPhaseMarker -->
+  <g transform="translate(224 0)">
+    <rect class="k" x="6" y="24" width="20" height="2"/>
+    <rect class="v" x="9" y="8" width="4" height="2"/><rect class="v" x="19" y="8" width="4" height="2"/>
+    <rect class="v" x="11" y="10" width="4" height="2"/><rect class="v" x="17" y="10" width="4" height="2"/>
+    <rect class="v" x="13" y="12" width="2" height="2"/><rect class="v" x="17" y="12" width="2" height="2"/>
+    <rect class="v" x="14" y="14" width="4" height="2"/>
+    <rect class="v" x="15" y="16" width="2" height="2"/>
+    <rect class="y" x="15" y="18" width="2" height="2"/>
+  </g>
+
+  <!-- timelineNode -->
+  <g transform="translate(256 0)">
+    <rect class="m" x="0" y="15" width="32" height="2"/>
+    <rect class="k" x="12" y="8" width="8" height="2"/><rect class="k" x="12" y="22" width="8" height="2"/>
+    <rect class="k" x="10" y="10" width="2" height="12"/><rect class="k" x="20" y="10" width="2" height="12"/>
+    <rect class="w" x="12" y="10" width="8" height="12"/>
+    <rect class="t" x="14" y="14" width="4" height="4"/>
+    <rect class="w" x="12" y="10" width="2" height="2"/>
+  </g>
+</svg>

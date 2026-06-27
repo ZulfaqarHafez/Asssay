@@ -49,6 +49,111 @@ def test_demo_run_completes_with_scorecard(monkeypatch) -> None:
     assert any(probe["id"] == "tracerazor" for probe in bundle["connector_probes"])
 
 
+def test_agent_spec_endpoint_and_export(monkeypatch) -> None:
+    class FakeAudit:
+        def __init__(self, threshold: float):
+            self.threshold = threshold
+
+        def analyse(self, candidate, trace_steps, task_value_score):
+            from interviu_api.models import TraceAuditSummary
+
+            return TraceAuditSummary(
+                status="ok",
+                trace_id="trace_test",
+                tas_score=88,
+                grade="Good",
+                passes=True,
+                total_steps=len(trace_steps),
+                total_tokens=1000,
+            )
+
+    monkeypatch.setattr("interviu_api.orchestrator.TraceAuditService", FakeAudit)
+
+    with TestClient(app) as client:
+        candidate_id = client.get("/candidates").json()[0]["id"]
+        run = client.post("/runs", json={"candidate_id": candidate_id}).json()
+        client.post(f"/runs/{run['id']}/start")
+        spec = client.get(f"/runs/{run['id']}/agent-spec").json()
+        export = client.post(f"/runs/{run['id']}/agent-spec/export-files").json()
+        bundle = client.get(f"/runs/{run['id']}/proof-bundle").json()
+
+    assert spec["schema"] == "interviu.agent_spec.v1"
+    assert spec["run_id"] == run["id"]
+    assert spec["readiness"] in {"ready", "refine", "needs_subagents"}
+    assert spec["agent_markdown"].startswith("# Demo Candidate")
+    assert isinstance(spec["sub_agents"], list)
+    assert spec["metrics"]["tas_score"] == 88
+
+    assert export["run_id"] == run["id"]
+    assert "AGENTS.md" in export["files"]
+    agents_md = Path(export["files"]["AGENTS.md"])
+    assert agents_md.exists()
+    assert "Refined Agent Spec" in agents_md.read_text(encoding="utf-8")
+
+    # Sub-agent .md files are written to disk, one per recommendation.
+    assert export["sub_agent_count"] == len(spec["sub_agents"])
+    subagent_keys = [name for name in export["files"] if name.startswith("subagents/")]
+    assert len(subagent_keys) == export["sub_agent_count"]
+    if subagent_keys:
+        sub_md = Path(export["files"][subagent_keys[0]])
+        assert sub_md.exists()
+        assert "## When to delegate" in sub_md.read_text(encoding="utf-8")
+
+    assert bundle["agent_spec"]["schema"] == "interviu.agent_spec.v1"
+    assert bundle["agent_spec"]["run_id"] == run["id"]
+
+
+def test_agent_spec_recommends_subagents_for_failing_run(monkeypatch) -> None:
+    class FakeAudit:
+        def __init__(self, threshold: float):
+            self.threshold = threshold
+
+        def analyse(self, candidate, trace_steps, task_value_score):
+            from interviu_api.models import TraceAuditSummary
+
+            return TraceAuditSummary(
+                status="ok", trace_id="t", tas_score=88, grade="Good", passes=True,
+                total_steps=len(trace_steps), total_tokens=1000,
+            )
+
+    def failing_grade(item, response, threshold):
+        from interviu_api.scoring import GradeResult
+
+        return GradeResult(
+            score=0.2,
+            passed=False,
+            panel_scores={"rubric": 0.2, "compliance": 0.2, "consistency": 0.2},
+            matched_checks=[],
+            missed_checks=[check.id for check in item.expected_checks],
+            forbidden_hits=[],
+            feedback="needs work",
+        )
+
+    monkeypatch.setattr("interviu_api.orchestrator.TraceAuditService", FakeAudit)
+    monkeypatch.setattr("interviu_api.orchestrator.grade_response", failing_grade)
+
+    with TestClient(app) as client:
+        candidate_id = client.get("/candidates").json()[0]["id"]
+        run = client.post("/runs", json={"candidate_id": candidate_id}).json()
+        client.post(f"/runs/{run['id']}/start")
+        spec = client.get(f"/runs/{run['id']}/agent-spec").json()
+
+    assert spec["readiness"] == "needs_subagents"
+    assert spec["metrics"]["recommended_subagents"] >= 1
+    assert any(sub["priority"] == "recommended" for sub in spec["sub_agents"])
+
+
+def test_agent_spec_requires_started_run(monkeypatch) -> None:
+    with TestClient(app) as client:
+        candidate_id = client.get("/candidates").json()[0]["id"]
+        run = client.post("/runs", json={"candidate_id": candidate_id}).json()
+        response = client.get(f"/runs/{run['id']}/agent-spec")
+        missing = client.get("/runs/run_does_not_exist/agent-spec")
+
+    assert response.status_code == 409
+    assert missing.status_code == 404
+
+
 def test_connector_probe_reports_local_evidence(monkeypatch) -> None:
     monkeypatch.setattr("interviu_api.connectors._load_tracerazor_client", lambda: object)
     monkeypatch.setattr("interviu_api.connectors.shutil.which", lambda command: f"C:/tools/{command}.exe" if command == "hf" else None)

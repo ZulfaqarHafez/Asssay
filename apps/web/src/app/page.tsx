@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  Bot,
   CheckCircle2,
   PanelRightOpen,
   Play,
@@ -12,10 +13,11 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Sparkles,
   X
 } from "lucide-react";
 import { interviuApi } from "@/lib/api";
-import type { CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, ProofBundle, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
+import type { AgentResearch, AgentSpec, CandidateConfig, Connector, ConnectorProbe, DatabaseHealth, ExamPack, ExamPackExport, ExamPackFileExport, ProofBundle, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
 
 type LoadState = "idle" | "loading" | "running" | "complete" | "error";
 
@@ -39,6 +41,10 @@ export default function Home() {
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [trace, setTrace] = useState<TracePayload | null>(null);
   const [proofBundle, setProofBundle] = useState<ProofBundle | null>(null);
+  const [agentSpec, setAgentSpec] = useState<AgentSpec | null>(null);
+  const [agentExport, setAgentExport] = useState<{ run_id: string; directory: string; sub_agent_count: number } | null>(null);
+  const [agentResearch, setAgentResearch] = useState<AgentResearch | null>(null);
+  const [researchBusy, setResearchBusy] = useState<"fast" | "deep" | null>(null);
   const [state, setState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -77,6 +83,22 @@ export default function Home() {
     ? `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(examPackExport, null, 2))}`
     : null;
   const examExportFilename = examPackExport ? `interviu-${examPackExport.pack.id}-exam-pack.json` : "interviu-exam-pack.json";
+  const rosterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const event of events) {
+      counts[event.actor] = (counts[event.actor] ?? 0) + 1;
+    }
+    return counts;
+  }, [events]);
+  const roster = useMemo(
+    () => buildRoster(state === "running", rosterCounts, scorecard, selectedExamPack?.simulator_model),
+    [state, rosterCounts, scorecard, selectedExamPack?.simulator_model]
+  );
+  const agentMarkdownHref = useMemo(
+    () => (agentSpec ? `data:text/markdown;charset=utf-8,${encodeURIComponent(agentSpec.agent_markdown)}` : null),
+    [agentSpec]
+  );
+  const agentMarkdownFilename = agentSpec ? `interviu-${agentSpec.run_id}-AGENTS.md` : "AGENTS.md";
 
   async function loadBoot() {
     setState("loading");
@@ -184,6 +206,9 @@ export default function Home() {
     setScorecard(null);
     setTrace(null);
     setProofBundle(null);
+    setAgentSpec(null);
+    setAgentExport(null);
+    setAgentResearch(null);
     try {
       const activeCandidate =
         candidate ??
@@ -207,6 +232,7 @@ export default function Home() {
       setEvents(eventPayload);
       setTrace(tracePayload);
       setProofBundle(bundlePayload);
+      setAgentSpec(bundlePayload.agent_spec ?? null);
       setRecentRuns(runsPayload);
       setState("complete");
     } catch (exc) {
@@ -235,6 +261,9 @@ export default function Home() {
       setEvents(tracePayload.events);
       setTrace(tracePayload);
       setProofBundle(bundlePayload);
+      setAgentSpec(bundlePayload.agent_spec ?? null);
+      setAgentExport(null);
+      setAgentResearch(null);
       setDrawerOpen(true);
       setState("complete");
     } catch (exc) {
@@ -261,11 +290,62 @@ export default function Home() {
         setEvents(tracePayload.events);
         setTrace(tracePayload);
         setProofBundle(bundlePayload);
+        setAgentSpec(bundlePayload.agent_spec ?? null);
       } catch (exc) {
         setError(errorMessage(exc));
       }
     }
     setDrawerOpen(true);
+  }
+
+  async function refreshAgentSpec() {
+    const runId = scorecard?.run_id ?? run?.id;
+    if (!runId) {
+      setError("Run an evaluation first, then refine the agent spec.");
+      return;
+    }
+    setError(null);
+    try {
+      const spec = await interviuApi.agentSpec(runId);
+      setAgentSpec(spec);
+      setDrawerOpen(true);
+    } catch (exc) {
+      setError(errorMessage(exc));
+    }
+  }
+
+  async function writeAgentSpecFiles() {
+    const runId = agentSpec?.run_id ?? scorecard?.run_id ?? run?.id;
+    if (!runId) {
+      setError("Run an evaluation first, then export the agent spec.");
+      return;
+    }
+    setError(null);
+    try {
+      const exportPayload = await interviuApi.agentSpecFileExport(runId);
+      setAgentExport(exportPayload);
+    } catch (exc) {
+      setError(errorMessage(exc));
+    }
+  }
+
+  async function runResearch(mode: "fast" | "deep") {
+    const runId = agentSpec?.run_id ?? scorecard?.run_id ?? run?.id;
+    if (!runId) {
+      setError("Run an evaluation first, then research the agent with OpenAI.");
+      return;
+    }
+    setError(null);
+    setResearchBusy(mode);
+    try {
+      const research = await interviuApi.agentResearch(runId, mode);
+      setAgentResearch(research);
+      setDrawerOpen(true);
+    } catch (exc) {
+      setError(errorMessage(exc));
+    } finally {
+      setResearchBusy(null);
+    }
   }
 
   async function exportProofBundle() {
@@ -316,6 +396,7 @@ export default function Home() {
         </div>
 
         <div className="arena">
+          <div className="arena-inner">
           <div className="room-panel">
             <div className="room-copy">
               <span className="eyebrow">{state === "running" ? "Running" : "Ready"}</span>
@@ -346,6 +427,24 @@ export default function Home() {
                 })}
               </div>
             </div>
+          </div>
+          <div className="agent-roster" aria-label="interview agent panel">
+            <span className="roster-title">
+              <Bot size={16} /> Agent panel {state === "running" ? "convening" : scorecard ? "complete" : "ready"}
+            </span>
+            <div className="roster-track">
+              {roster.map((agent) => (
+                <div className={`roster-agent ${agent.state}`} key={agent.key} title={agent.title}>
+                  <span
+                    className={`sprite-sheet ${agent.sheet} roster-sprite sprite-${agent.sprite} ${agent.state === "active" ? "thinking" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="roster-name">{agent.label}</span>
+                  <span className="roster-meta">{agent.meta}</span>
+                </div>
+              ))}
+            </div>
+          </div>
           </div>
         </div>
 
@@ -494,6 +593,100 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="panel-section">
+          <h2 className="section-title">Agent refinery</h2>
+          {agentSpec ? (
+            <>
+              <div className={`score-hero ${refineryHeroClass(agentSpec.readiness)}`}>
+                <span className="refinery-verdict">
+                  <Sparkles size={16} /> {readinessLabel(agentSpec.readiness)}
+                </span>
+                <span className={`sprite-sheet mini-sprite sprite-${readinessSprite(agentSpec.readiness)}`} aria-hidden="true" />
+              </div>
+              <p className="refinery-headline">{agentSpec.headline}</p>
+              <div className="refinery-stats">
+                <Metric label="Strengths" value={String(agentSpec.strengths.length)} />
+                <Metric label="Gaps" value={String(agentSpec.gaps.length)} />
+                <Metric label="Sub-agents" value={String(agentSpec.sub_agents.length)} />
+              </div>
+              {agentSpec.sub_agents.length > 0 && (
+                <div className="subagent-rail">
+                  {agentSpec.sub_agents.slice(0, 4).map((sub) => (
+                    <div className="subagent-chip" key={sub.id} title={sub.trigger}>
+                      <span className={`sprite-sheet mini-sprite sprite-${sub.sprite}`} aria-hidden="true" />
+                      <span className="subagent-chip-copy">
+                        <strong>{sub.name}</strong>
+                        <small>{sub.focus}</small>
+                      </span>
+                      <span className={`pill ${sub.priority === "recommended" ? "ready" : "planned"}`}>
+                        {sub.priority === "recommended" ? "rec" : "opt"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="library-actions">
+                <button className="command-button" type="button" onClick={openTraceDrawer}>
+                  <Bot size={16} />
+                  View spec
+                </button>
+                {agentMarkdownHref && (
+                  <a className="command-button" href={agentMarkdownHref} download={agentMarkdownFilename}>
+                    <Save size={16} />
+                    AGENTS.md
+                  </a>
+                )}
+                <button className="command-button" type="button" onClick={writeAgentSpecFiles}>
+                  <Save size={16} />
+                  Write files
+                </button>
+              </div>
+              <div className="library-actions">
+                <button
+                  className="command-button"
+                  type="button"
+                  onClick={() => runResearch("fast")}
+                  disabled={researchBusy !== null}
+                  title="One OpenAI reasoning call grounded in this run"
+                >
+                  <Sparkles size={16} />
+                  {researchBusy === "fast" ? "Researching…" : "OpenAI research"}
+                </button>
+                <button
+                  className="command-button"
+                  type="button"
+                  onClick={() => runResearch("deep")}
+                  disabled={researchBusy !== null}
+                  title="OpenAI web-search deep research; can take a few minutes"
+                >
+                  <Sparkles size={16} />
+                  {researchBusy === "deep" ? "Deep researching…" : "Deep research (web)"}
+                </button>
+              </div>
+              {agentResearch && agentResearch.status !== "ok" && (
+                <p className="refinery-note">
+                  OpenAI research {agentResearch.status}: {agentResearch.message}
+                </p>
+              )}
+              {agentExport && (
+                <div className="artifact-card">
+                  <span>Agent export</span>
+                  <strong>{agentExport.sub_agent_count} sub-agent files</strong>
+                  <small>{agentExport.directory}</small>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="refinery-empty">
+              <p>Run an evaluation to refine a reusable agent.md and sub-agent recommendations.</p>
+              <button className="command-button" type="button" onClick={refreshAgentSpec} disabled={!scorecard && !run}>
+                <Sparkles size={16} />
+                Refine agent.md
+              </button>
+            </div>
+          )}
+        </section>
+
         <details className="panel-section quiet-details">
           <summary>Exam export</summary>
           <div className="connector-row">
@@ -534,6 +727,7 @@ export default function Home() {
           {recentRuns.length ? (
             recentRuns.slice(0, 5).map((item) => (
               <button className="ledger-row" type="button" key={item.id} onClick={() => loadPersistedRun(item.id)}>
+                <span className={`sprite-sheet mini-sprite sheet-runs sprite-${runSprite(item.status)}`} aria-hidden="true" />
                 <span>
                   <strong>{item.id}</strong>
                   <small>{item.status} / {item.exam_pack_id}</small>
@@ -597,8 +791,8 @@ export default function Home() {
         {(scorecard?.failure_reasons.length || error) ? (
           <section className="panel-section">
             <h2 className="section-title">Needs attention</h2>
-            {scorecard?.failure_reasons.map((failure) => (
-              <div className="failure-row" key={failure}>{failure}</div>
+            {scorecard?.failure_reasons.map((failure, index) => (
+              <div className="failure-row" key={`${index}-${failure}`}>{failure}</div>
             ))}
             {error && <p className="error-text">{error}</p>}
           </section>
@@ -614,6 +808,12 @@ export default function Home() {
           proofBundleHref={proofBundleHref}
           proofBundleFilename={proofBundleFilename}
           databaseHealth={databaseHealth}
+          agentSpec={agentSpec}
+          agentMarkdownHref={agentMarkdownHref}
+          agentMarkdownFilename={agentMarkdownFilename}
+          agentExport={agentExport}
+          agentResearch={agentResearch}
+          onWriteAgentFiles={writeAgentSpecFiles}
           onExport={exportProofBundle}
           onClose={() => setDrawerOpen(false)}
         />
@@ -639,6 +839,12 @@ function TraceDrawer({
   proofBundleHref,
   proofBundleFilename,
   databaseHealth,
+  agentSpec,
+  agentMarkdownHref,
+  agentMarkdownFilename,
+  agentExport,
+  agentResearch,
+  onWriteAgentFiles,
   onExport,
   onClose
 }: {
@@ -649,8 +855,14 @@ function TraceDrawer({
   proofBundleHref: string | null;
   proofBundleFilename: string;
   databaseHealth: DatabaseHealth | null;
-  onExport: () => void;
+  agentSpec: AgentSpec | null;
+  agentMarkdownHref: string | null;
+  agentMarkdownFilename: string;
+  agentExport: { run_id: string; directory: string; sub_agent_count: number } | null;
+  agentResearch: AgentResearch | null;
+  onWriteAgentFiles: () => void;
   onClose: () => void;
+  onExport: () => void;
 }) {
   const audit = scorecard?.trace_audit;
   return (
@@ -691,6 +903,132 @@ function TraceDrawer({
         <span>Proof bundle</span>
         <strong>{proofBundle ? `${proofBundle.summary.event_count} spans` : "not exported"}</strong>
       </div>
+      {agentSpec && (
+        <section className="drawer-refinery">
+          <div className="drawer-refinery-head">
+            <span className="refinery-verdict">
+              <Sparkles size={16} /> Agent refinery — {readinessLabel(agentSpec.readiness)}
+            </span>
+            <div className="drawer-actions">
+              {agentMarkdownHref && (
+                <a className="icon-button" title="Download AGENTS.md" href={agentMarkdownHref} download={agentMarkdownFilename}>
+                  <Save size={18} />
+                </a>
+              )}
+              <button className="icon-button" type="button" title="Write agent spec files" onClick={onWriteAgentFiles}>
+                <Bot size={18} />
+              </button>
+            </div>
+          </div>
+          <p className="refinery-headline">{agentSpec.headline}</p>
+          {agentSpec.tracerazor_actions.length > 0 && (
+            <ul className="refinery-actions">
+              {agentSpec.tracerazor_actions.map((action, index) => (
+                <li key={`${index}-${action}`}>{action}</li>
+              ))}
+            </ul>
+          )}
+          {agentSpec.sub_agents.length > 0 && (
+            <div className="subagent-grid">
+              {agentSpec.sub_agents.map((sub) => (
+                <article className="subagent-card" key={sub.id}>
+                  <header>
+                    <span className={`sprite-sheet mini-sprite sprite-${sub.sprite}`} aria-hidden="true" />
+                    <span>
+                      <strong>{sub.name}</strong>
+                      <small>{sub.role}</small>
+                    </span>
+                    <span className={`pill ${sub.priority === "recommended" ? "ready" : "planned"}`}>{sub.priority}</span>
+                  </header>
+                  <p>{sub.trigger}</p>
+                  <div className="subagent-meta">
+                    <span>{sub.focus}</span>
+                    <span>{sub.tools.join(", ") || "no extra tools"}</span>
+                  </div>
+                  <a
+                    className="command-button"
+                    href={`data:text/markdown;charset=utf-8,${encodeURIComponent(sub.definition_markdown)}`}
+                    download={`${sub.id}.md`}
+                  >
+                    <Save size={16} />
+                    {sub.id}.md
+                  </a>
+                </article>
+              ))}
+            </div>
+          )}
+          <details className="quiet-details drawer-md">
+            <summary>Refined AGENTS.md</summary>
+            <pre>{agentSpec.agent_markdown}</pre>
+          </details>
+          {agentExport && (
+            <div className="artifact-card">
+              <span>Agent export</span>
+              <strong>{agentExport.sub_agent_count} sub-agent files</strong>
+              <small>{agentExport.directory}</small>
+            </div>
+          )}
+        </section>
+      )}
+      {agentResearch && (
+        <section className="drawer-research">
+          <div className="drawer-refinery-head">
+            <span className="refinery-verdict">
+              <Sparkles size={16} /> OpenAI research ({agentResearch.mode})
+            </span>
+            <span className="pill ready">{agentResearch.model ?? agentResearch.status}</span>
+          </div>
+          {agentResearch.status !== "ok" ? (
+            <p className="error-text">{agentResearch.status}: {agentResearch.message}</p>
+          ) : (
+            <>
+              <p className="refinery-headline">{agentResearch.summary}</p>
+              {agentResearch.recommended_tools.length > 0 && (
+                <div className="connector-row">
+                  <span>Tools</span>
+                  <strong>{agentResearch.recommended_tools.join(", ")}</strong>
+                </div>
+              )}
+              {agentResearch.recommended_subagents.length > 0 && (
+                <div className="subagent-grid">
+                  {agentResearch.recommended_subagents.map((idea) => (
+                    <article className="subagent-card" key={idea.name}>
+                      <header>
+                        <span className="sprite-sheet mini-sprite sprite-candidate" aria-hidden="true" />
+                        <span>
+                          <strong>{idea.name}</strong>
+                          <small>{idea.purpose}</small>
+                        </span>
+                      </header>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {agentResearch.risks.length > 0 && (
+                <ul className="refinery-actions">
+                  {agentResearch.risks.map((risk, index) => (
+                    <li key={`${index}-${risk}`}>{risk}</li>
+                  ))}
+                </ul>
+              )}
+              {agentResearch.sources.length > 0 && (
+                <div className="research-sources">
+                  <span className="section-title">Sources</span>
+                  {agentResearch.sources.map((source) => (
+                    <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
+                      {source.title || source.url}
+                    </a>
+                  ))}
+                </div>
+              )}
+              <details className="quiet-details drawer-md">
+                <summary>Research brief</summary>
+                <pre>{agentResearch.brief_markdown}</pre>
+              </details>
+            </>
+          )}
+        </section>
+      )}
       {(events.length ? events : trace?.events ?? []).map((event) => (
         <article className="event-row" key={event.span_id}>
           <header>
@@ -772,6 +1110,91 @@ function candidateDockSprite(candidate: CandidateConfig | null) {
   if (candidate?.adapter_type === "local-command") return "sprite-local-command";
   if (candidate?.adapter_type === "openai-compatible") return "sprite-model-chip";
   return "sprite-candidate";
+}
+
+type RosterAgent = {
+  key: string;
+  label: string;
+  sprite: string;
+  sheet: string;
+  state: "idle" | "active" | "done";
+  meta: string;
+  title: string;
+};
+
+function buildRoster(
+  running: boolean,
+  counts: Record<string, number>,
+  scorecard: Scorecard | null,
+  simulatorModel?: string
+): RosterAgent[] {
+  const roles: Array<{ key: string; label: string; sheet: string; actor: string; doneMeta: (count: number) => string }> = [
+    { key: "examiner", label: "Examiner", sheet: "", actor: "examiner", doneMeta: (count) => `${count} asked` },
+    { key: "grader", label: "Judge panel", sheet: "sheet-judging", actor: "grader_panel", doneMeta: (count) => `${count} graded` },
+    { key: "lessons", label: "Lessons", sheet: "sheet-lessons", actor: "lesson_library", doneMeta: (count) => `${count} kept` },
+    { key: "trace", label: "TraceRazor", sheet: "", actor: "trace_auditor", doneMeta: () => traceRosterMeta(scorecard) },
+    { key: "sim", label: "Simulator", sheet: "", actor: "system", doneMeta: () => (simulatorModel ? "scored" : "ready") }
+  ];
+  return roles.map((role) => {
+    const count = counts[role.actor] ?? 0;
+    const state: RosterAgent["state"] = running ? "active" : count > 0 ? "done" : "idle";
+    const meta = running ? "working" : count > 0 ? role.doneMeta(count) : "idle";
+    return {
+      key: role.key,
+      label: role.label,
+      sprite: rosterSprite(role.key, running, count, scorecard),
+      sheet: role.sheet,
+      state,
+      meta,
+      title: `${role.label}: ${meta}`
+    };
+  });
+}
+
+function rosterSprite(key: string, running: boolean, count: number, scorecard: Scorecard | null): string {
+  if (key === "grader") {
+    if (running) return "grader-deliberating";
+    if (scorecard?.certified) return "grader-approve";
+    if (scorecard) return "grader-reject";
+    return "grader-deliberating";
+  }
+  if (key === "lessons") {
+    if (running) return "new-lesson-stamp";
+    if (count > 4) return "library-many";
+    if (count > 0) return "library-few";
+    return "library-empty";
+  }
+  const map: Record<string, string> = { examiner: "domain", trace: "tracerazor", sim: "simulator" };
+  return map[key] ?? "candidate";
+}
+
+function runSprite(status: string): string {
+  if (status === "running") return "run-running";
+  if (status === "completed") return "run-complete";
+  if (status === "failed") return "fail-bead";
+  return "run-queued";
+}
+
+function traceRosterMeta(scorecard: Scorecard | null) {
+  const tas = scorecard?.trace_audit.tas_score;
+  if (tas !== null && tas !== undefined) return `TAS ${tas.toFixed(0)}`;
+  return scorecard?.trace_audit.status ?? "idle";
+}
+
+function readinessLabel(readiness: AgentSpec["readiness"]) {
+  if (readiness === "ready") return "Ready to ship";
+  if (readiness === "needs_subagents") return "Add sub-agents";
+  return "Refine";
+}
+
+function readinessSprite(readiness: AgentSpec["readiness"]) {
+  if (readiness === "ready") return "candidate-approved";
+  if (readiness === "needs_subagents") return "candidate-question";
+  return "candidate-review";
+}
+
+function refineryHeroClass(readiness: AgentSpec["readiness"]) {
+  return readiness === "ready" ? "passed" : "review";
 }
 
 function downloadJson(filename: string, payload: unknown) {

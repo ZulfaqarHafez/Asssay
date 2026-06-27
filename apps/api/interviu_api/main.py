@@ -19,8 +19,10 @@ from .database import (
     save_run,
     trace_payload,
 )
+from .agent_refinery import agent_spec_payload
+from .agent_research import load_local_env, research_agent_spec
 from .exam_packs import exam_pack_export, get_exam_pack, list_exam_packs, register_exam_pack
-from .exports import write_exam_pack_files
+from .exports import write_agent_spec_files, write_exam_pack_files
 from .models import CandidateConfig, ExamPack, RunCreate, RunRecord
 from .orchestrator import RunOrchestrator
 from .trace_audit import _load_tracerazor_client
@@ -39,6 +41,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
+    load_local_env()
     init_db()
     candidates = list_candidates()
     if not candidates:
@@ -188,6 +191,47 @@ def run_trace(run_id: str) -> dict:
     return trace_payload(run_id)
 
 
+@app.get("/runs/{run_id}/agent-spec")
+def run_agent_spec(run_id: str) -> dict:
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    try:
+        payload = agent_spec_payload(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Run references an unregistered exam pack") from exc
+    if payload is None:
+        raise HTTPException(status_code=409, detail="Run has no scorecard yet; start the run first")
+    return payload
+
+
+@app.post("/runs/{run_id}/agent-spec/export-files")
+def export_agent_spec_files(run_id: str) -> dict:
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    try:
+        export = write_agent_spec_files(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Run references an unregistered exam pack") from exc
+    if export is None:
+        raise HTTPException(status_code=409, detail="Run has no scorecard yet; start the run first")
+    return export.model_dump(mode="json")
+
+
+@app.post("/runs/{run_id}/agent-spec/research")
+def run_agent_research(run_id: str, mode: str = "fast") -> dict:
+    if mode not in ("fast", "deep"):
+        raise HTTPException(status_code=422, detail="mode must be 'fast' or 'deep'")
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    try:
+        research = research_agent_spec(run_id, mode)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Run references an unregistered exam pack") from exc
+    if research is None:
+        raise HTTPException(status_code=409, detail="Run has no scorecard yet; start the run first")
+    return research.model_dump(mode="json")
+
+
 @app.get("/runs/{run_id}/proof-bundle")
 def run_proof_bundle(run_id: str) -> dict:
     bundle = proof_bundle(run_id)
@@ -197,8 +241,13 @@ def run_proof_bundle(run_id: str) -> dict:
         db_health = database_health()
     except Exception as exc:
         db_health = {"ok": False, "error": str(exc)}
+    try:
+        agent_spec = agent_spec_payload(run_id)
+    except KeyError:
+        agent_spec = None
     return bundle | {
         "database": db_health,
         "connectors": connector_registry(),
         "connector_probes": connector_probes(),
+        "agent_spec": agent_spec,
     }

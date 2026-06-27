@@ -76,6 +76,36 @@ const events = [
   }
 ];
 
+const agentSpec = {
+  schema: "interviu.agent_spec.v1",
+  run_id: "run_demo",
+  candidate_id: "cand_demo",
+  candidate_name: "Demo Candidate",
+  exam_pack_id: "hr-v1",
+  generated_at: "2026-06-27T00:00:00Z",
+  readiness: "ready",
+  headline: "Demo Candidate certified pass^3 on held-out variants.",
+  agent_markdown: "# Demo Candidate — Refined Agent Spec\n\n## Guardrails\n- Use job-related criteria only.\n",
+  strengths: ["Compliance (held-out 96%)"],
+  gaps: [],
+  tracerazor_actions: ["TraceRazor TAS 88/100 [Good] — passed."],
+  sub_agents: [
+    {
+      id: "trace-auditor",
+      name: "Trace Auditor",
+      role: "Records reasoning/tool steps and scores token adequacy with TraceRazor.",
+      focus: "Token-adequate, auditable traces",
+      trigger: "TraceRazor TAS 88 passed; keep auditing token adequacy as volume grows.",
+      sprite: "tracerazor",
+      priority: "optional",
+      tools: ["tracerazor.Tracer", "tracerazor.TraceRazorClient"],
+      delegation_rule: "After each run, submit the candidate-only trace to TraceRazor.",
+      definition_markdown: "# Trace Auditor\n\nRecords reasoning/tool steps.\n"
+    }
+  ],
+  metrics: { recommended_subagents: 0, optional_subagents: 1, tas_score: 88 }
+};
+
 const proofBundle = {
   schema: "interviu.proof_bundle.v1",
   product: "Interviu",
@@ -94,10 +124,14 @@ const proofBundle = {
   },
   database: { ok: true, backend: "sqlite" },
   connectors: [],
-  connector_probes: []
+  connector_probes: [],
+  agent_spec: agentSpec
 };
 
+let agentSpecOverride: typeof agentSpec | null = null;
+
 beforeEach(() => {
+  agentSpecOverride = null;
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/health")) {
@@ -237,7 +271,38 @@ beforeEach(() => {
       return json({ run_id: "run_demo", events, scorecard });
     }
     if (url.endsWith("/runs/run_demo/proof-bundle")) {
-      return json(proofBundle);
+      return json(agentSpecOverride ? { ...proofBundle, agent_spec: agentSpecOverride } : proofBundle);
+    }
+    if (url.includes("/runs/run_demo/agent-spec/research")) {
+      return json({
+        run_id: "run_demo",
+        candidate_id: "cand_demo",
+        candidate_name: "Demo Candidate",
+        mode: "fast",
+        status: "ok",
+        model: "gpt-4.1",
+        summary: "A compliance-first, auditable HR screening agent.",
+        brief_markdown: "# Brief\n- Stay lawful and job-related.",
+        recommended_tools: ["policy_lookup", "redactor"],
+        recommended_subagents: [{ name: "Privacy Vault Steward", purpose: "minimize sensitive data" }],
+        risks: ["over-trusts tool output"],
+        sources: [],
+        generated_at: "2026-06-27T00:00:00Z"
+      });
+    }
+    if (url.endsWith("/runs/run_demo/agent-spec/export-files")) {
+      return json({
+        run_id: "run_demo",
+        directory: "C:\\Users\\zulfa\\Interviu\\exports\\agents\\run_demo",
+        files: {
+          "AGENTS.md": "C:\\Users\\zulfa\\Interviu\\exports\\agents\\run_demo\\AGENTS.md",
+          "agent-spec.json": "C:\\Users\\zulfa\\Interviu\\exports\\agents\\run_demo\\agent-spec.json"
+        },
+        sub_agent_count: 1
+      });
+    }
+    if (url.endsWith("/runs/run_demo/agent-spec")) {
+      return json(agentSpecOverride ?? agentSpec);
     }
     return json({}, 404);
   }) as typeof fetch;
@@ -259,6 +324,65 @@ describe("Interviu page", () => {
     expect(screen.getByText("Add HTTP candidate")).toBeInTheDocument();
     expect(screen.getByText("Exam export")).toBeInTheDocument();
     expect(screen.getByText("Adversarial HR screening")).toBeInTheDocument();
+    expect(screen.getByText("Agent refinery")).toBeInTheDocument();
+    expect(screen.getByText("Judge panel")).toBeInTheDocument();
+  });
+
+  it("refines an agent.md and recommends sub-agents after a run", async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    await screen.findByRole("button", { name: /run evaluation/i });
+    await user.click(screen.getByRole("button", { name: /run evaluation/i }));
+    expect(await screen.findByText("Ready to ship")).toBeInTheDocument();
+    expect(screen.getAllByText("Trace Auditor").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /view spec/i }));
+    expect(await screen.findByText("Refined AGENTS.md")).toBeInTheDocument();
+    // The optional trace-auditor sub-agent exposes a downloadable .md.
+    const subAgentLink = screen.getByRole("link", { name: /trace-auditor\.md/ });
+    expect(subAgentLink).toHaveAttribute("download", "trace-auditor.md");
+  });
+
+  it("surfaces recommended sub-agents for a needs_subagents verdict", async () => {
+    agentSpecOverride = {
+      ...agentSpec,
+      readiness: "needs_subagents",
+      headline: "Weak Agent needs refinement on 1 competency area(s); delegate to 1 focused sub-agent(s).",
+      sub_agents: [
+        {
+          id: "fairness",
+          name: "Fairness Counterfactual Checker",
+          role: "Applies counterfactual consistency and ignores protected traits.",
+          focus: "Fairness (held-out 50%)",
+          trigger: "Fairness did not hold on held-out variants.",
+          sprite: "candidate-evidence",
+          priority: "recommended",
+          tools: ["counterfactual_check"],
+          delegation_rule: "Hand off any prompt whose primary risk is fairness.",
+          definition_markdown: "# Fairness Counterfactual Checker\n\n## When to delegate\n- ...\n"
+        }
+      ]
+    };
+    const user = userEvent.setup();
+    render(<Home />);
+    await screen.findByRole("button", { name: /run evaluation/i });
+    await user.click(screen.getByRole("button", { name: /run evaluation/i }));
+    expect(await screen.findByText("Add sub-agents")).toBeInTheDocument();
+    expect(screen.getByText("rec")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /view spec/i }));
+    const recLink = await screen.findByRole("link", { name: /fairness\.md/ });
+    expect(recLink).toHaveAttribute("download", "fairness.md");
+  });
+
+  it("runs OpenAI research and shows the result in the drawer", async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    await screen.findByRole("button", { name: /run evaluation/i });
+    await user.click(screen.getByRole("button", { name: /run evaluation/i }));
+    await screen.findByText("Ready to ship");
+    await user.click(screen.getByRole("button", { name: /^openai research$/i }));
+    expect(await screen.findByText("A compliance-first, auditable HR screening agent.")).toBeInTheDocument();
+    expect(screen.getByText("Research brief")).toBeInTheDocument();
+    expect(screen.getByText(/minimize sensitive data/)).toBeInTheDocument();
   });
 
   it("starts a demo run and shows TraceRazor output", async () => {

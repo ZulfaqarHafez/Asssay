@@ -255,17 +255,28 @@ select {
   --sprite-x: 0;
   --sprite-y: 0;
   --sprite-scale: 1;
+  --sprite-sheet-url: url("/sprites/interviu-dojo-sprites.svg");
+  --sprite-cols: 9;
+  --sprite-rows: 5;
   display: inline-block;
   width: calc(32px * var(--sprite-scale));
   height: calc(32px * var(--sprite-scale));
-  background-image: url("/sprites/interviu-dojo-sprites.svg");
+  background-image: var(--sprite-sheet-url);
   background-repeat: no-repeat;
-  background-size: calc(288px * var(--sprite-scale)) calc(160px * var(--sprite-scale));
+  background-size:
+    calc(32px * var(--sprite-cols) * var(--sprite-scale))
+    calc(32px * var(--sprite-rows) * var(--sprite-scale));
   background-position:
     calc(-32px * var(--sprite-x) * var(--sprite-scale))
     calc(-32px * var(--sprite-y) * var(--sprite-scale));
   image-rendering: pixelated;
 }
+
+/* Additional sprite sheets (judging / lessons / runs) — each 9 cols x 1 row.
+   Apply alongside .sprite-sheet, e.g. class="sprite-sheet sheet-runs sprite-pass-bead". */
+.sheet-judging { --sprite-sheet-url: url("/sprites/interviu-judging-sprites.svg"); --sprite-cols: 9; --sprite-rows: 1; }
+.sheet-lessons { --sprite-sheet-url: url("/sprites/interviu-lessons-sprites.svg"); --sprite-cols: 9; --sprite-rows: 1; }
+.sheet-runs { --sprite-sheet-url: url("/sprites/interviu-runs-sprites.svg"); --sprite-cols: 9; --sprite-rows: 1; }
 
 .hero-sprite {
   --sprite-scale: 2.5;
@@ -317,8 +328,310 @@ select {
 .sprite-candidate-proof { --sprite-x: 7; --sprite-y: 4; }
 .sprite-candidate-calm { --sprite-x: 8; --sprite-y: 4; }
 
+/* Judging sheet tiles (use with .sheet-judging) */
+.sprite-grader-deliberating { --sprite-x: 0; --sprite-y: 0; }
+.sprite-grader-approve { --sprite-x: 1; --sprite-y: 0; }
+.sprite-grader-reject { --sprite-x: 2; --sprite-y: 0; }
+.sprite-gavel { --sprite-x: 3; --sprite-y: 0; }
+.sprite-score-meter-low { --sprite-x: 4; --sprite-y: 0; }
+.sprite-score-meter-mid { --sprite-x: 5; --sprite-y: 0; }
+.sprite-score-meter-high { --sprite-x: 6; --sprite-y: 0; }
+.sprite-grader-disagreement { --sprite-x: 7; --sprite-y: 0; }
+.sprite-verdict-sealed { --sprite-x: 8; --sprite-y: 0; }
+
+/* Lessons sheet tiles (use with .sheet-lessons) */
+.sprite-lesson-scroll { --sprite-x: 0; --sprite-y: 0; }
+.sprite-lesson-book { --sprite-x: 1; --sprite-y: 0; }
+.sprite-new-lesson-stamp { --sprite-x: 2; --sprite-y: 0; }
+.sprite-library-empty { --sprite-x: 3; --sprite-y: 0; }
+.sprite-library-few { --sprite-x: 4; --sprite-y: 0; }
+.sprite-library-many { --sprite-x: 5; --sprite-y: 0; }
+.sprite-lesson-applied { --sprite-x: 6; --sprite-y: 0; }
+.sprite-lesson-pinned { --sprite-x: 7; --sprite-y: 0; }
+
+/* Runs sheet tiles (use with .sheet-runs) */
+.sprite-run-queued { --sprite-x: 0; --sprite-y: 0; }
+.sprite-run-running { --sprite-x: 1; --sprite-y: 0; }
+.sprite-seen-trial { --sprite-x: 2; --sprite-y: 0; }
+.sprite-held-out-trial { --sprite-x: 3; --sprite-y: 0; }
+.sprite-pass-bead { --sprite-x: 4; --sprite-y: 0; }
+.sprite-fail-bead { --sprite-x: 5; --sprite-y: 0; }
+.sprite-run-complete { --sprite-x: 6; --sprite-y: 0; }
+.sprite-current-phase-marker { --sprite-x: 7; --sprite-y: 0; }
+.sprite-timeline-node { --sprite-x: 8; --sprite-y: 0; }
+
 .hero-sprite.thinking {
   animation: bob 900ms steps(2) infinite;
+}
+
+.arena-inner {
+  width: min(850px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.agent-roster {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.roster-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.roster-track {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.roster-agent {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 6px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+  transition: border-color 140ms ease, background 140ms ease, opacity 140ms ease;
+}
+
+.roster-agent.idle {
+  opacity: 0.55;
+}
+
+.roster-agent.active {
+  border-color: var(--teal);
+  background: #f1f8f6;
+}
+
+.roster-agent.done {
+  border-color: #bed8c4;
+  background: #f6fbf7;
+}
+
+.roster-sprite {
+  --sprite-scale: 1.4;
+}
+
+.roster-name {
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.roster-meta {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.refinery-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.refinery-headline {
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #34302d;
+}
+
+.refinery-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.refinery-empty {
+  display: grid;
+  gap: 10px;
+}
+
+.refinery-empty p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.subagent-rail {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.subagent-chip {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.subagent-chip-copy {
+  min-width: 0;
+}
+
+.subagent-chip-copy strong,
+.subagent-chip-copy small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.subagent-chip-copy strong {
+  font-size: 12px;
+}
+
+.subagent-chip-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.drawer-refinery {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #faf8f4;
+}
+
+.drawer-refinery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.refinery-actions {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #34302d;
+  line-height: 1.4;
+}
+
+.subagent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.subagent-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+
+.subagent-card header {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.subagent-card header strong,
+.subagent-card header small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.subagent-card header strong {
+  font-size: 12px;
+}
+
+.subagent-card header small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.subagent-card p {
+  margin: 0;
+  font-size: 11px;
+  color: #34302d;
+  line-height: 1.35;
+}
+
+.subagent-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.subagent-meta span {
+  overflow-wrap: anywhere;
+}
+
+.drawer-md pre {
+  margin-top: 10px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.drawer-research {
+  border: 1px solid var(--violet);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #f8f6fc;
+}
+
+.refinery-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.research-sources {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+}
+
+.research-sources a {
+  color: var(--teal);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .seat {
@@ -1065,5 +1378,13 @@ pre {
 
   .bar-row {
     grid-template-columns: minmax(84px, 118px) 1fr 38px;
+  }
+
+  .roster-track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .subagent-grid {
+    grid-template-columns: 1fr;
   }
 }

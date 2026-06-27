@@ -58,11 +58,15 @@ npm --workspace apps/web run test
 
 ## Product Surface
 
-- The first screen is the evaluation workspace with run setup, score, proof, and a calm candidate room.
+- The first screen is the evaluation workspace with run setup, score, proof, a candidate room, and the agent panel.
+- The arena spawns the full interview cast as pixel sprites — examiner, judge panel, lesson library, TraceRazor auditor, and simulator — that activate during a run alongside the candidate.
 - Advanced details such as exam export, previous runs, connector probes, and trace spans stay collapsed until needed.
 - HTTP candidates can be registered from the web app and use the same examiner, scoring, persistence, and TraceRazor path as mock candidates.
+- The Agent Refinery turns each run into a refined `AGENTS.md` for the candidate plus grounded sub-agent recommendations; details are in [docs/agent-refinery.md](docs/agent-refinery.md).
+- An optional OpenAI layer can research "what this agent should be" on demand — fast (grounded in the run) or deep (web search with cited sources) — via `POST /runs/{run_id}/agent-spec/research?mode=fast|deep`. The key is read server-side only from `OPENAI_API_KEY`/`openai_key` in a git-ignored root `.env`/`env`; with no key the feature reports `unavailable` and the rest of Interviu keeps working offline.
 - `GET /runs` lists stored runs from the active database backend.
-- `GET /runs/{run_id}/proof-bundle` returns a portable JSON bundle with the run, candidate, scorecard, event spans, TraceRazor summary, database health, and connector probes.
+- `GET /runs/{run_id}/agent-spec` returns the refined `interviu.agent_spec.v1` agent definition, and `POST /runs/{run_id}/agent-spec/export-files` writes `AGENTS.md` plus one `.md` per recommended sub-agent.
+- `GET /runs/{run_id}/proof-bundle` returns a portable JSON bundle with the run, candidate, scorecard, event spans, TraceRazor summary, refined agent spec, database health, and connector probes.
 - The web app can load a previous run from the ledger and export the current proof bundle as JSON.
 
 ## MVP Boundaries

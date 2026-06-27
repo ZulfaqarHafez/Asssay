@@ -107,6 +107,7 @@ export type TraceAuditSummary = {
   metrics: Record<string, unknown>;
   savings: Record<string, unknown>;
   fixes: Array<Record<string, unknown>>;
+  raw: Record<string, unknown>;
   message?: string | null;
 };
 
@@ -135,6 +136,70 @@ export type TracePayload = {
   scorecard: Scorecard | null;
 };
 
+export type SubAgentSpec = {
+  id: string;
+  name: string;
+  role: string;
+  focus: string;
+  trigger: string;
+  sprite: string;
+  priority: "recommended" | "optional";
+  tools: string[];
+  delegation_rule: string;
+  definition_markdown: string;
+};
+
+export type AgentSpec = {
+  schema: "interviu.agent_spec.v1";
+  run_id: string;
+  candidate_id: string;
+  candidate_name: string;
+  exam_pack_id: string;
+  generated_at: string;
+  readiness: "ready" | "refine" | "needs_subagents";
+  headline: string;
+  agent_markdown: string;
+  strengths: string[];
+  gaps: string[];
+  tracerazor_actions: string[];
+  sub_agents: SubAgentSpec[];
+  metrics: Record<string, unknown>;
+};
+
+export type AgentSpecFileExport = {
+  run_id: string;
+  directory: string;
+  files: Record<string, string>;
+  sub_agent_count: number;
+};
+
+export type SubAgentIdea = {
+  name: string;
+  purpose: string;
+};
+
+export type AgentResearchSource = {
+  title: string;
+  url: string;
+};
+
+export type AgentResearch = {
+  run_id: string;
+  candidate_id: string;
+  candidate_name: string;
+  mode: "fast" | "deep";
+  status: "ok" | "unavailable" | "error";
+  model?: string | null;
+  summary: string;
+  brief_markdown: string;
+  recommended_tools: string[];
+  recommended_subagents: SubAgentIdea[];
+  risks: string[];
+  sources: AgentResearchSource[];
+  message?: string | null;
+  generated_at: string;
+};
+
 export type DatabaseHealth = {
   backend: string;
   ok: boolean;
@@ -161,4 +226,5 @@ export type ProofBundle = {
   database: DatabaseHealth | Record<string, unknown>;
   connectors: Connector[];
   connector_probes: ConnectorProbe[];
+  agent_spec: AgentSpec | null;
 };

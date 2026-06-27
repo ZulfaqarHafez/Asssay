@@ -5,11 +5,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .agent_refinery import load_agent_spec
 from .exam_packs import exam_pack_export
-from .models import ExamPackFileExport
+from .models import AgentSpecFileExport, ExamPackFileExport
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 EXPORT_ROOT = PROJECT_ROOT / "exports" / "exam-packs"
+AGENT_EXPORT_ROOT = PROJECT_ROOT / "exports" / "agents"
 
 
 def write_exam_pack_files(pack_id: str) -> ExamPackFileExport:
@@ -40,6 +42,38 @@ def write_exam_pack_files(pack_id: str) -> ExamPackFileExport:
         files={name: str(path) for name, path in files.items()},
         row_count=len(rows),
         suggested_commands=_local_hf_commands(pack["id"], directory),
+    )
+
+
+def write_agent_spec_files(run_id: str) -> AgentSpecFileExport | None:
+    spec = load_agent_spec(run_id)
+    if spec is None:
+        return None
+    slug = _safe_slug(spec.run_id)
+    directory = AGENT_EXPORT_ROOT / slug
+    sub_dir = directory / "subagents"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+
+    files: dict[str, Path] = {
+        "AGENTS.md": directory / "AGENTS.md",
+        "agent-spec.json": directory / "agent-spec.json",
+    }
+    files["AGENTS.md"].write_text(spec.agent_markdown, encoding="utf-8")
+    files["agent-spec.json"].write_text(
+        json.dumps({"schema": "interviu.agent_spec.v1", **spec.model_dump(mode="json")}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    for sub_agent in spec.sub_agents:
+        name = f"subagents/{_safe_slug(sub_agent.id)}.md"
+        path = sub_dir / f"{_safe_slug(sub_agent.id)}.md"
+        path.write_text(sub_agent.definition_markdown, encoding="utf-8")
+        files[name] = path
+
+    return AgentSpecFileExport(
+        run_id=spec.run_id,
+        directory=str(directory),
+        files={name: str(path) for name, path in files.items()},
+        sub_agent_count=len(spec.sub_agents),
     )
 
 
