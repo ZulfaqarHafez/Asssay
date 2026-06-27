@@ -11,6 +11,29 @@ export type CandidateConfig = {
   created_at?: string;
 };
 
+export type Health = {
+  ok: boolean;
+  tracerazor_importable: boolean;
+  database_backend: string;
+  /** True when an OpenAI key is configured, so an uploaded agent.md runs for real. */
+  openai_configured?: boolean;
+};
+
+export type AgentIntakeDetected = {
+  role: string;
+  title: string;
+  tools: string[];
+  tool_count: number;
+  token_estimate: number;
+};
+
+export type AgentIntakeResponse = {
+  candidate: CandidateConfig;
+  /** "live" when executed against a real LLM, "demo" when run deterministically. */
+  mode: "live" | "demo";
+  detected: AgentIntakeDetected;
+};
+
 export type ExamPack = {
   id: string;
   name: string;

@@ -27,7 +27,7 @@ import type {
   TracePayload
 } from "@/types/interviu";
 
-type HealthPayload = { ok: boolean; tracerazor_importable: boolean; database_backend: string };
+type HealthPayload = { ok: boolean; tracerazor_importable: boolean; database_backend: string; openai_configured?: boolean };
 
 /**
  * Centralized query-key factory. Downstream components and mutations reuse these

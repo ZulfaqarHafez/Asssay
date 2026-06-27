@@ -6,7 +6,7 @@ from typing import Literal
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from .connectors import connector_probes, connector_registry
 from .database import (
     database_health,
@@ -25,8 +25,9 @@ from .database import (
     trace_payload,
 )
 from .progress import candidate_progress, lesson_library, run_comparison
+from .agent_intake import detect_agent_facts
 from .agent_refinery import agent_spec_payload
-from .agent_research import load_local_env, research_agent_spec
+from .agent_research import load_local_env, research_agent_spec, resolve_openai_key
 from .exam_packs import exam_pack_export, get_exam_pack, list_exam_packs, register_exam_pack
 from .exports import write_agent_spec_files, write_exam_pack_files
 from .models import CandidateConfig, ExamPack, JobScope, RunCreate, RunRecord
@@ -49,6 +50,7 @@ from .rate_limit import limiter, rate_limit
 from .security import require_api_key
 
 _MAX_ROLE_SCOPE_CHARS = 8000
+_MAX_AGENT_MD_CHARS = 20000
 
 _DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
@@ -66,12 +68,31 @@ def _cors_origins() -> list[str]:
     return origins or list(_DEFAULT_CORS_ORIGINS)
 
 
+# In dev (no explicit allowlist) the web server auto-scans for a free port, so it
+# may land on any localhost port — allow the whole local range via regex. When
+# INTERVIU_CORS_ORIGINS is set (production), this stays None and the explicit
+# allowlist is the only thing honored.
+def _cors_origin_regex() -> str | None:
+    if os.environ.get("INTERVIU_CORS_ORIGINS", "").strip():
+        return None
+    return r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
 logger = configure_logging()
 
 class RoleAnalysisRequest(BaseModel):
     raw_text: str = Field(default="", max_length=_MAX_ROLE_SCOPE_CHARS)
     extract: Literal["keyword", "openai-fast", "openai-deep"] = "keyword"
     override_pack_id: str | None = None
+
+
+class AgentMarkdownRequest(BaseModel):
+    """An agent definition (``agent.md`` / ``AGENTS.md``) submitted as a candidate."""
+
+    markdown: str = Field(min_length=1, max_length=_MAX_AGENT_MD_CHARS)
+    name: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # Auth is applied globally (opt-in via INTERVIU_API_KEYS). /health and
@@ -89,6 +110,7 @@ app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -142,6 +164,7 @@ def health() -> dict[str, object]:
         "service": "interviu-api",
         "database_backend": database_backend_name(),
         "tracerazor_importable": _load_tracerazor_client() is not None,
+        "openai_configured": bool(resolve_openai_key()),
     }
 
 
@@ -226,6 +249,45 @@ def candidates() -> list[dict]:
 @app.post("/candidates")
 def create_candidate(candidate: CandidateConfig) -> dict:
     return save_candidate(candidate).model_dump(mode="json")
+
+
+@app.post("/candidates/from-markdown")
+def create_candidate_from_markdown(request: AgentMarkdownRequest) -> dict:
+    """Register an agent definition markdown as a candidate under test.
+
+    The raw ``agent.md`` is stored as the candidate's ``system_prompt``. When an
+    OpenAI key is configured the candidate runs live via the OpenAI-compatible
+    prompt adapter; otherwise it falls back to the deterministic mock so the demo
+    still runs offline. Facts (role, tools, token estimate) are detected from the
+    markdown without any network call.
+    """
+
+    markdown = request.markdown[:_MAX_AGENT_MD_CHARS]
+    detected = detect_agent_facts(markdown)
+
+    live = bool(resolve_openai_key())
+    mode = "live" if live else "demo"
+    adapter_type = "openai-compatible" if live else "mock"
+
+    candidate = CandidateConfig(
+        name=request.name or detected["title"],
+        adapter_type=adapter_type,
+        system_prompt=markdown,
+        metadata={"source": "agent-md", **detected},
+    )
+    saved = save_candidate(candidate)
+
+    return {
+        "candidate": saved.model_dump(mode="json"),
+        "mode": mode,
+        "detected": {
+            "role": detected["role"],
+            "title": detected["title"],
+            "tools": detected["tools"],
+            "tool_count": detected["tool_count"],
+            "token_estimate": detected["token_estimate"],
+        },
+    }
 
 
 @app.get("/candidates/{candidate_id}/progress")

@@ -1,4 +1,4 @@
-import type { AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, CandidateProgress, Connector, ConnectorProbe, DatabaseHealth, DiagnosticLesson, ExamPack, ExamPackExport, ExamPackFileExport, JobScope, ProductReview, ProofBundle, RoleAnalysis, RunComparison, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
+import type { AgentIntakeResponse, AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, CandidateProgress, Connector, ConnectorProbe, DatabaseHealth, DiagnosticLesson, ExamPack, ExamPackExport, ExamPackFileExport, Health, JobScope, ProductReview, ProofBundle, RoleAnalysis, RunComparison, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
 
 function apiBaseUrl() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
@@ -30,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const interviuApi = {
-  health: () => request<{ ok: boolean; tracerazor_importable: boolean; database_backend: string }>("/health"),
+  health: () => request<Health>("/health"),
   databaseHealth: () => request<DatabaseHealth>("/health/database"),
   examPacks: () => request<ExamPack[]>("/exam-packs"),
   examPackExport: (packId: string) => request<ExamPackExport>(`/exam-packs/${packId}/export`),
@@ -46,6 +46,11 @@ export const interviuApi = {
     request<CandidateConfig>("/candidates", {
       method: "POST",
       body: JSON.stringify(candidate)
+    }),
+  candidateFromMarkdown: (markdown: string, name?: string | null) =>
+    request<AgentIntakeResponse>("/candidates/from-markdown", {
+      method: "POST",
+      body: JSON.stringify({ markdown, name: name ?? null })
     }),
   createRun: (candidateId: string, examPackId = "hr-v1", jobScope: JobScope | null = null) =>
     request<RunRecord>("/runs", {

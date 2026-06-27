@@ -104,6 +104,35 @@ async function startRunWithSignal(runId: string, signal: AbortSignal): Promise<S
   return response.json() as Promise<Scorecard>;
 }
 
+/**
+ * A live run executes every exam turn inside the single `/start` request, which
+ * can run for minutes. Some networks drop such long-lived connections, but the
+ * run keeps going server-side and persists its result. When the `/start` fetch
+ * fails for that reason, recover by polling the run until it settles, so a
+ * completed run is never lost to a dropped connection.
+ */
+async function recoverRunResult(runId: string, signal: AbortSignal): Promise<Scorecard | "failed" | null> {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline && !signal.aborted) {
+    try {
+      const runResponse = await fetch(`${apiBaseUrl()}/runs/${runId}`, { signal });
+      if (runResponse.ok) {
+        const record = (await runResponse.json()) as { status?: string };
+        if (record.status === "completed") {
+          const scoreResponse = await fetch(`${apiBaseUrl()}/runs/${runId}/scorecard`, { signal });
+          if (scoreResponse.ok) return (await scoreResponse.json()) as Scorecard;
+        } else if (record.status === "failed") {
+          return "failed";
+        }
+      }
+    } catch {
+      // Keep polling; the run may still be in flight.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return null;
+}
+
 /** Default poll-based event source. Swap for an SSE source without touching callers. */
 function createPollSource(intervalMs = DEFAULT_POLL_MS): RunEventSource {
   return {
@@ -234,17 +263,32 @@ export function useRunStream(source?: RunEventSource): UseRunStream {
             isActive: false
           }));
         })
-        .catch((exc: unknown) => {
+        .catch(async (exc: unknown) => {
           if (!mountedRef.current) return;
           if (controller.signal.aborted) {
             // Aborts are surfaced through cancel(), not here.
+            return;
+          }
+          // The /start connection dropped — but the run may still be completing
+          // server-side. Try to recover its result before declaring failure.
+          const recovered = await recoverRunResult(runId, controller.signal);
+          if (!mountedRef.current || controller.signal.aborted) return;
+          if (recovered && recovered !== "failed") {
+            teardown();
+            setState((prev) => ({
+              ...prev,
+              status: "completed",
+              scorecard: recovered,
+              progress: prev.totalExpected > 0 ? Math.max(prev.progress, 1) : prev.progress,
+              isActive: false
+            }));
             return;
           }
           teardown();
           setState((prev) => ({
             ...prev,
             status: "failed",
-            error: exc instanceof Error ? exc.message : "Run failed",
+            error: recovered === "failed" ? "The run failed server-side." : exc instanceof Error ? exc.message : "Run failed",
             isActive: false
           }));
         });

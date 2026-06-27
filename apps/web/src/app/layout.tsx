@@ -5,8 +5,8 @@ import { Toaster } from "@/components/Toaster";
 import { AnnouncerProvider } from "@/components/announcer";
 
 export const metadata: Metadata = {
-  title: "Interviu",
-  description: "Candidate evaluation with TraceRazor proof",
+  title: "Assay — litmus test for AI agents",
+  description: "Bring your agent.md. Find out where it breaks before you ship.",
   icons: {
     icon: "/brand/interviu-mark.svg"
   }

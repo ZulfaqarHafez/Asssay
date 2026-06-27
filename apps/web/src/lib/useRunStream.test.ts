@@ -65,25 +65,29 @@ function controllableSource() {
 let resolveStart: (value: Scorecard) => void;
 let rejectStart: (reason: unknown) => void;
 
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+}
+
 beforeEach(() => {
-  global.fetch = vi.fn(
-    (_input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((resolve, reject) => {
-        // Surface an abort the same way the browser fetch does.
+  global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    // The long-lived /start request is the one tests resolve/reject/abort.
+    if (url.endsWith("/start")) {
+      return new Promise<Response>((resolve, reject) => {
         init?.signal?.addEventListener("abort", () => {
-          const err = new DOMException("Aborted", "AbortError");
-          reject(err);
+          reject(new DOMException("Aborted", "AbortError"));
         });
-        resolveStart = (scorecard: Scorecard) =>
-          resolve(
-            new Response(JSON.stringify(scorecard), {
-              status: 200,
-              headers: { "Content-Type": "application/json" }
-            })
-          );
+        resolveStart = (scorecard: Scorecard) => resolve(jsonResponse(scorecard));
         rejectStart = reject;
-      })
-  ) as typeof fetch;
+      });
+    }
+    // Recovery polling after a dropped /start: by default the run failed.
+    if (url.endsWith("/runs/run_1")) {
+      return Promise.resolve(jsonResponse({ id: "run_1", status: "failed" }));
+    }
+    return Promise.resolve(jsonResponse({}, 404));
+  }) as typeof fetch;
 });
 
 afterEach(() => {
@@ -123,7 +127,7 @@ describe("useRunStream", () => {
     expect(result.current.isActive).toBe(false);
   });
 
-  it("transitions to failed when the start request rejects", async () => {
+  it("fails when the start request rejects and the run failed server-side", async () => {
     const { source } = controllableSource();
     const { result } = renderHook(() => useRunStream(source));
     act(() => result.current.start("run_1", { k: 1, itemCount: 1 }));
@@ -133,8 +137,38 @@ describe("useRunStream", () => {
       await Promise.resolve();
     });
 
+    // The dropped /start triggers recovery; the run record reports `failed`.
     await waitFor(() => expect(result.current.status).toBe("failed"));
-    expect(result.current.error).toMatch(/boom/);
+    expect(result.current.error).toMatch(/server-side/);
+  });
+
+  it("recovers a completed scorecard when the start connection drops mid-run", async () => {
+    // A dropped /start, but the run finishes server-side: recovery polling
+    // sees status `completed` and pulls the persisted scorecard.
+    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/start")) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+          rejectStart = reject;
+        });
+      }
+      if (url.endsWith("/runs/run_1/scorecard")) return Promise.resolve(jsonResponse(baseScorecard));
+      if (url.endsWith("/runs/run_1")) return Promise.resolve(jsonResponse({ id: "run_1", status: "completed" }));
+      return Promise.resolve(jsonResponse({}, 404));
+    }) as typeof fetch;
+
+    const { source } = controllableSource();
+    const { result } = renderHook(() => useRunStream(source));
+    act(() => result.current.start("run_1", { k: 1, itemCount: 1 }));
+
+    await act(async () => {
+      rejectStart(new Error("network dropped"));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("completed"));
+    expect(result.current.scorecard?.run_id).toBe("run_1");
   });
 
   it("cancel() aborts the in-flight start request and goes to canceled", async () => {

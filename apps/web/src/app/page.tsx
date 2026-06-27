@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Bot,
   CheckCircle2,
+  FlaskConical,
   PanelRightOpen,
   Play,
   Plus,
@@ -50,6 +51,10 @@ import TraceDrawer from "@/components/trace/TraceDrawer";
 import CompetencyRadar from "@/components/scorecard/CompetencyRadar";
 import RunStateMachine from "@/components/run/RunStateMachine";
 import EmptyState from "@/components/onboarding/EmptyState";
+import AgentIntake from "@/components/assay/AgentIntake";
+import JudgingWaterfall from "@/components/assay/JudgingWaterfall";
+import VerdictPanel from "@/components/assay/VerdictPanel";
+import { AGENT_TEMPLATES } from "@/lib/assayTemplates";
 import ProgressTrend from "@/components/progress/ProgressTrend";
 import DiagnosticLibrary from "@/components/library/DiagnosticLibrary";
 import RunComparison from "@/components/scorecard/RunComparison";
@@ -118,6 +123,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [httpCandidateOpen, setHttpCandidateOpen] = useState(false);
+  const [intakeSubmitting, setIntakeSubmitting] = useState(false);
 
   const runStream = useRunStream();
 
@@ -367,6 +373,41 @@ export default function Home() {
     runStream.cancel();
   }
 
+  // Assay primary flow: take an uploaded/authored agent.md, register it as the
+  // candidate under test (live LLM when a key is set, deterministic demo when
+  // not), then immediately run the adversarial exam and stream the judging.
+  async function runAgentMarkdown(markdown: string) {
+    if (!markdown.trim()) return;
+    setError(null);
+    resetRunArtifacts();
+    runStream.reset();
+    setRun(null);
+    setIntakeSubmitting(true);
+    try {
+      const intake = await interviuApi.candidateFromMarkdown(markdown);
+      const created = intake.candidate;
+      setExtraCandidates((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSelectedCandidateId(created.id);
+      void candidatesQuery.refetch();
+      const packId = selectedExamPack?.id ?? selectedExamPackId ?? "hr-v1";
+      const createdRun = await interviuApi.createRun(created.id, packId, null);
+      setRun(createdRun);
+      runStream.start(createdRun.id, { k: createdRun.k, itemCount: selectedExamPack?.items.length });
+    } catch (exc) {
+      setError(errorMessage(exc));
+    } finally {
+      setIntakeSubmitting(false);
+    }
+  }
+
+  // Return to the calm intake screen to test another agent.
+  function testAnother() {
+    setError(null);
+    resetRunArtifacts();
+    runStream.reset();
+    setRun(null);
+  }
+
   async function loadPersistedRun(runId: string) {
     setError(null);
     runStream.reset();
@@ -512,8 +553,74 @@ export default function Home() {
   const comparisonBaseline = scorecard?.prior_run_id ?? run?.id ?? null;
   const activeRunId = scorecard?.run_id ?? run?.id ?? null;
 
+  // Phase drives the calm, single-focus primary surface: intake → judging → verdict.
+  const runEnded = runStream.status === "failed" || runStream.status === "canceled";
+  const phase: "intake" | "running" | "verdict" = scorecard
+    ? "verdict"
+    : isRunning || runEnded
+      ? "running"
+      : "intake";
+
   return (
-    <main className="app-shell">
+    <main className="assay-shell">
+      <header className="assay-topbar">
+        <div className="assay-brand">
+          <span className="assay-brand-mark" aria-hidden="true">
+            <FlaskConical size={20} />
+          </span>
+          <div>
+            <h1>Assay</h1>
+            <p>Pre-deployment litmus test for AI agents</p>
+          </div>
+        </div>
+        <ThemeToggle />
+      </header>
+
+      <div className="assay-stage">
+        {phase === "intake" && (
+          <AgentIntake
+            examPackName={selectedExamPack?.name ?? "the exam"}
+            liveMode={Boolean(health?.openai_configured)}
+            submitting={intakeSubmitting}
+            templates={AGENT_TEMPLATES}
+            onRun={runAgentMarkdown}
+          />
+        )}
+        {phase === "running" && (
+          <JudgingWaterfall
+            status={runStream.status}
+            events={runStream.events}
+            gradedCount={runStream.gradedCount}
+            totalExpected={runStream.totalExpected}
+            progress={runStream.progress}
+            agentName={candidate?.name ?? "your agent"}
+            onCancel={cancelRun}
+          />
+        )}
+        {phase === "verdict" && scorecard && (
+          <VerdictPanel
+            scorecard={scorecard}
+            agentSpec={agentSpec}
+            agentName={candidate?.name ?? scorecard.run_id}
+            onViewTrace={openTraceDrawer}
+            onTestAnother={testAnother}
+          />
+        )}
+        {error && phase !== "verdict" && (
+          <p className="assay-error" role="alert">{error}</p>
+        )}
+        {runEnded && (
+          <div className="assay-retry">
+            <button type="button" className="assay-ghost-button" onClick={testAnother}>
+              Back to start
+            </button>
+          </div>
+        )}
+      </div>
+
+      <details className="assay-advanced">
+        <summary>Evaluation cockpit (advanced)</summary>
+        <div className="app-shell">
       <section className="arena-band workbench" aria-label="Interviu evaluation workspace">
         <div className="topbar">
           <div className="brand">
@@ -1107,6 +1214,8 @@ export default function Home() {
           </section>
         ) : null}
       </aside>
+        </div>
+      </details>
 
       <TraceDrawer
         events={events}

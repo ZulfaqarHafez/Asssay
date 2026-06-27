@@ -311,6 +311,14 @@ beforeEach(() => {
         }
       ]);
     }
+    if (url.endsWith("/candidates/from-markdown")) {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      return json({
+        candidate: { ...candidate, system_prompt: body.markdown, adapter_type: "mock" },
+        mode: "demo",
+        detected: { role: "agent", title: "Demo Agent", tools: ["lookup"], tool_count: 1, token_estimate: 40 }
+      });
+    }
     if (url.endsWith("/candidates") && init?.method === "POST") {
       const body = JSON.parse(String(init.body ?? "{}"));
       return json({ ...httpCandidate, ...body, id: httpCandidate.id });
@@ -379,6 +387,31 @@ afterEach(() => {
 });
 
 describe("Interviu page", () => {
+  it("leads with the Assay agent.md intake as the first screen", async () => {
+    renderHome();
+    await screen.findByRole("heading", { name: "Assay" });
+    expect(screen.getByRole("button", { name: /run the litmus test/i })).toBeDisabled();
+    expect(screen.getByText(/find out where it breaks/i)).toBeInTheDocument();
+    // A starter template is offered as the fallback.
+    expect(screen.getByText(/HR screener \(hardened\)/i)).toBeInTheDocument();
+    // The legacy cockpit is preserved behind an advanced disclosure.
+    expect(screen.getByText(/Evaluation cockpit \(advanced\)/i)).toBeInTheDocument();
+  });
+
+  it("runs an uploaded agent.md and lands on a verdict", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    const template = await screen.findByText(/HR screener \(hardened\)/i);
+    await user.click(template);
+    const runButton = screen.getByRole("button", { name: /run the litmus test/i });
+    await waitFor(() => expect(runButton).toBeEnabled());
+    await user.click(runButton);
+    // Lands on the verdict hero with the ranked "what to fix" list.
+    await screen.findByText("What to fix");
+    expect(screen.getAllByText("Ready to ship").length).toBeGreaterThan(0);
+    expect(screen.getByText(/By capability/i)).toBeInTheDocument();
+  });
+
   it("renders the evaluation workspace as the first screen", async () => {
     renderHome();
     await screen.findByRole("heading", { name: "Interviu" });
