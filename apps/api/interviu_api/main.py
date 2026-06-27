@@ -40,8 +40,13 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     init_db()
-    if not list_candidates():
+    candidates = list_candidates()
+    if not candidates:
         save_candidate(CandidateConfig(name="Demo Candidate", adapter_type="mock"))
+        return
+    for candidate in candidates:
+        if candidate.adapter_type == "mock" and candidate.name == "Demo HR Agent" and not candidate.metadata:
+            save_candidate(candidate.model_copy(update={"name": "Demo Candidate"}))
 
 
 @app.get("/health")

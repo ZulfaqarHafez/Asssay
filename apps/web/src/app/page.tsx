@@ -243,6 +243,31 @@ export default function Home() {
     }
   }
 
+  async function openTraceDrawer() {
+    const runId = scorecard?.run_id ?? run?.id;
+    if (!runId) {
+      setDrawerOpen(true);
+      return;
+    }
+    const hasCurrentTrace = trace?.run_id === runId;
+    const hasCurrentBundle = proofBundle?.run.id === runId;
+    if (!hasCurrentTrace || !hasCurrentBundle) {
+      setError(null);
+      try {
+        const [tracePayload, bundlePayload] = await Promise.all([
+          interviuApi.trace(runId),
+          interviuApi.proofBundle(runId)
+        ]);
+        setEvents(tracePayload.events);
+        setTrace(tracePayload);
+        setProofBundle(bundlePayload);
+      } catch (exc) {
+        setError(errorMessage(exc));
+      }
+    }
+    setDrawerOpen(true);
+  }
+
   async function exportProofBundle() {
     const runId = run?.id ?? scorecard?.run_id;
     if (!runId) {
@@ -277,7 +302,7 @@ export default function Home() {
             <button className="icon-button" type="button" title="Probe connectors" onClick={refreshConnectorProbes}>
               <Activity size={18} />
             </button>
-            <button className="icon-button" type="button" title="Open trace drawer" onClick={() => setDrawerOpen(true)}>
+            <button className="icon-button" type="button" title="Open trace drawer" onClick={openTraceDrawer}>
               <PanelRightOpen size={18} />
             </button>
             <button className="icon-button" type="button" title="Export proof bundle" onClick={exportProofBundle}>
@@ -458,7 +483,7 @@ export default function Home() {
             <strong>{scorecard ? maxTransferGap(scorecard).toFixed(2) : "0.00"}</strong>
           </div>
           <div className="library-actions">
-            <button className="command-button" type="button" onClick={() => setDrawerOpen(true)}>
+            <button className="command-button" type="button" onClick={openTraceDrawer}>
               <PanelRightOpen size={16} />
               View trace
             </button>
