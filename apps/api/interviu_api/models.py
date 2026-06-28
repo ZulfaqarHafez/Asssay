@@ -180,6 +180,10 @@ class RunRecord(BaseModel):
     tas_threshold: float = 70
     error: str | None = None
     job_scope: JobScope | None = None
+    # Set when the run synthesized a tailored exam pack from a role brief; the
+    # pack itself lives in the in-process registry and is re-derivable from the
+    # persisted ``role_qualified`` event.
+    generated_pack_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -305,6 +309,11 @@ class Scorecard(BaseModel):
     # fell back to deterministic demo answers, so the verdict is illustrative.
     degraded: bool = False
     degraded_reason: str | None = None
+    # How the exam/rubric for this run was sourced. ``tailored`` = fully
+    # role-researched probes + judge; ``deterministic`` = static pack + keyword
+    # grading (offline/no-key); ``partial`` = some stage fell back mid-run.
+    qualification_status: Literal["tailored", "deterministic", "partial"] = "deterministic"
+    role_brief_summary: str | None = None
     semantic_judge_used: bool = False
     semantic_judge_summary: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
@@ -387,6 +396,51 @@ class AgentResearch(BaseModel):
     sources: list[AgentResearchSource] = Field(default_factory=list)
     message: str | None = None
     generated_at: datetime = Field(default_factory=utc_now)
+
+
+class BriefCompetency(BaseModel):
+    """A competency the candidate agent should be judged on, derived from a deep
+    read of the agent's own definition (its ``agent.md``)."""
+
+    key: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
+    label: str = Field(min_length=1, max_length=_MAX_CHECK_TEXT_CHARS)
+    why: str = Field(default="", max_length=_MAX_RUBRIC_CHARS)
+    difficulty: Literal["intro", "standard", "adversarial"] = "standard"
+    # Keep deterministic keyword grading viable even when the tailored exam is
+    # generated: each competency seeds the generated checks with concrete terms.
+    seed_keywords: list[str] = Field(default_factory=list, max_length=_MAX_CHECK_TERMS)
+    forbidden: list[str] = Field(default_factory=list, max_length=_MAX_CHECK_TERMS)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RoleBrief(BaseModel):
+    """What the candidate agent *should* be, researched before judging.
+
+    Produced by the role-qualification stage from the agent's own definition
+    (plus optional web research) so the judge is grounded in this specific
+    agent/role rather than a fixed static pack. With no OpenAI key it degrades
+    to a deterministic brief seeded from role intelligence so the rest of the
+    flow keeps working offline.
+    """
+
+    schema_: Literal["assay.role_brief.v1"] = Field(default="assay.role_brief.v1", alias="schema")
+    run_id: str
+    candidate_id: str
+    candidate_name: str
+    mode: Literal["fast", "deep", "deterministic"]
+    status: Literal["ok", "unavailable", "error", "deterministic"]
+    model: str | None = None
+    role_summary: str = ""
+    should_do: list[str] = Field(default_factory=list)
+    must_not_do: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    competencies: list[BriefCompetency] = Field(default_factory=list)
+    sources: list[AgentResearchSource] = Field(default_factory=list)
+    message: str | None = None
+    generated_at: datetime = Field(default_factory=utc_now)
+
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
 
 
 class RoleAnalysis(BaseModel):

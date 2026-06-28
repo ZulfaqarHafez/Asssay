@@ -133,7 +133,7 @@ def test_agent_spec_recommends_subagents_for_failing_run(monkeypatch) -> None:
                 total_steps=len(trace_steps), total_tokens=1000,
             )
 
-    def failing_grade(item, response, threshold):
+    def failing_grade(item, response, threshold, **_kwargs):
         from interviu_api.scoring import GradeResult
 
         return GradeResult(

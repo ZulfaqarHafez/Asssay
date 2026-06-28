@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from statistics import mean
 from typing import Any
@@ -29,25 +30,46 @@ from .scoring import GradeResult, grade_response, panel_disagreement
 from .trace_audit import TraceAuditService
 
 
+def _flag_enabled(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def tailored_exams_enabled() -> bool:
+    """Master switch for the role-qualification / tailored-exam stage."""
+    return _flag_enabled("INTERVIU_TAILORED_EXAMS_ENABLED")
+
+
+def qualify_mode() -> str:
+    mode = (os.environ.get("INTERVIU_QUALIFY_MODE") or "fast").strip().lower()
+    return mode if mode in ("fast", "deep") else "fast"
+
+
 class RunOrchestrator:
     def __init__(self) -> None:
         self._sequence = 0
         self._trace_step_id = 0
         self._trace_steps: list[dict[str, Any]] = []
+        # Memoizes LLM-judge verdicts within a run by (item_id, answer hash) so
+        # the k re-trials of identical answers don't re-bill the judge.
+        self._judge_cache: dict[Any, dict[str, Any]] = {}
 
     async def start(self, run: RunRecord, candidate: CandidateConfig) -> Scorecard:
         run.status = "running"
         save_run(run)
-        pack = get_exam_pack(run.exam_pack_id)
         adapter = adapter_for(candidate)
-        # Closed learning loop: seed this run with diagnostics retained from the
-        # candidate's prior runs on this pack, so prior lessons are applied from
-        # the very first question. Within-run lessons still accumulate on top.
-        lessons, prior_by_comp, prior_run_id = self._load_prior_diagnostics(run, candidate, pack)
-        applied_lesson_ids = [lesson.id for group in prior_by_comp.values() for lesson in group]
 
         try:
-            self._event(run.id, "system", "run_started", {"candidate": candidate.name, "exam_pack": pack.id})
+            self._event(run.id, "system", "run_started", {"candidate": candidate.name, "exam_pack": run.exam_pack_id})
+            # Qualify the judge: research what this agent should be, then build a
+            # tailored exam from that brief. Both degrade to the static pack when
+            # the stage is off or OpenAI is unavailable.
+            role_brief = self._qualify(run, candidate)
+            pack, qualification_status = self._resolve_pack(run, role_brief)
+            # Closed learning loop: seed this run with diagnostics retained from the
+            # candidate's prior runs on this pack, so prior lessons are applied from
+            # the very first question. Within-run lessons still accumulate on top.
+            lessons, prior_by_comp, prior_run_id = self._load_prior_diagnostics(run, candidate, pack)
+            applied_lesson_ids = [lesson.id for group in prior_by_comp.values() for lesson in group]
             if applied_lesson_ids:
                 self._event(
                     run.id,
@@ -91,6 +113,9 @@ class RunOrchestrator:
             )
             scorecard.lessons_applied = applied_lesson_ids
             scorecard.prior_run_id = prior_run_id
+            scorecard.qualification_status = qualification_status
+            if role_brief is not None:
+                scorecard.role_brief_summary = role_brief.role_summary or None
             # If the live key was rate-limited, the run answered deterministically;
             # mark the verdict as a demo so the UI can say so plainly.
             if getattr(adapter, "degraded", False):
@@ -117,6 +142,53 @@ class RunOrchestrator:
             raise
         finally:
             await adapter.aclose()
+
+    # --- Judge qualification (research what the agent should be) ------------
+
+    def _qualify(self, run: RunRecord, candidate: CandidateConfig) -> Any:
+        """Research the role and record a brief, when the stage is enabled.
+
+        Phase 1 surfaces the brief as a ``role_qualified`` event without changing
+        the exam or grading. Returns the :class:`RoleBrief` (or ``None`` when the
+        stage is off) so callers can denormalize its summary onto the scorecard.
+        """
+        if not tailored_exams_enabled():
+            return None
+        from .role_qualification import build_role_brief
+
+        brief = build_role_brief(run, candidate, mode=qualify_mode())
+        self._event(run.id, "system", "role_qualified", brief.model_dump(mode="json", by_alias=True))
+        return brief
+
+    def _resolve_pack(self, run: RunRecord, role_brief: Any) -> tuple[Any, str]:
+        """Pick the exam pack for this run: a tailored pack synthesized from the
+        brief, or the run's already-selected static pack.
+
+        Returns ``(pack, qualification_status)``. When a tailored pack is built
+        it is registered and ``run.exam_pack_id`` is repointed at it so the rest
+        of the run (grading, lessons, ``get_exam_pack`` in ``_grade``) is
+        consistent. Synthesis failures fall back to the static pack.
+        """
+        if role_brief is None:
+            return get_exam_pack(run.exam_pack_id), "deterministic"
+        from .exam_synthesis import synthesize_exam_pack
+
+        pack, status = synthesize_exam_pack(role_brief, run)
+        if status == "tailored":
+            run.exam_pack_id = pack.id
+            run.generated_pack_id = pack.id
+            save_run(run)
+            self._event(
+                run.id,
+                "examiner",
+                "tailored_exam_generated",
+                {
+                    "pack_id": pack.id,
+                    "item_count": len(pack.items),
+                    "competencies": sorted({item.competency for item in pack.items}),
+                },
+            )
+        return pack, status
 
     # --- Diagnostic library (closed learning loop) -------------------------
 
@@ -398,7 +470,7 @@ class RunOrchestrator:
     ) -> GradeResult:
         pack = get_exam_pack(run.exam_pack_id)
         item = next(exam_item for exam_item in pack.items if exam_item.id == item_id)
-        result = grade_response(item, response, threshold)
+        result = grade_response(item, response, threshold, judge_cache=self._judge_cache)
         self._event(
             run.id,
             "grader_panel",

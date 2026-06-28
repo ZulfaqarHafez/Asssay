@@ -392,6 +392,8 @@ def runs() -> list[dict]:
                 item["pass_count"] = sum(1 for v in passes.values() if v)
                 item["total_count"] = len(passes)
                 item["degraded"] = scorecard.degraded
+                item["qualification_status"] = scorecard.qualification_status
+                item["role_brief_summary"] = scorecard.role_brief_summary
         items.append(item)
     return items
 
@@ -465,6 +467,21 @@ def run_role_analysis(run_id: str) -> dict:
     if payload is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return payload
+
+
+@app.get("/runs/{run_id}/role-brief")
+def run_role_brief(run_id: str) -> dict:
+    """The role brief the judge was qualified with, if the run produced one.
+
+    Reads the persisted ``role_qualified`` event rather than re-running research,
+    so it is free and reflects exactly what graded this run.
+    """
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    for event in reversed(list_events(run_id)):
+        if event.event_type == "role_qualified":
+            return event.payload
+    raise HTTPException(status_code=404, detail="Role brief not found for this run")
 
 
 @app.get("/runs/{run_id}/events")

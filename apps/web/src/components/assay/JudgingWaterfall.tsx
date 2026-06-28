@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Check, X, Loader2 } from "lucide-react";
-import { liveSteps, type LiveStep } from "@/lib/assay";
+import { liveSteps, roleQualified, tailoredExam, type LiveStep } from "@/lib/assay";
 import BrandMark from "@/components/ui/BrandMark";
 import type { RunEvent } from "@/types/interviu";
 import type { RunStreamStatus } from "@/lib/useRunStream";
@@ -35,6 +35,8 @@ export function JudgingWaterfall({
   onCancel
 }: JudgingWaterfallProps) {
   const steps = React.useMemo(() => liveSteps(events), [events]);
+  const qualify = React.useMemo(() => roleQualified(events), [events]);
+  const tailored = React.useMemo(() => tailoredExam(events), [events]);
   const grades = steps.filter((step) => step.kind === "grade");
   const isActive = status === "queued" || status === "running";
   const determinate = totalExpected > 0;
@@ -98,6 +100,31 @@ export function JudgingWaterfall({
       </div>
 
       <ul className="assay-waterfall" aria-live="polite">
+        {qualify && (
+          <li className="assay-step pass assay-step-qualify">
+            <span className="assay-step-icon" aria-hidden="true">
+              <Check size={15} />
+            </span>
+            <span className="assay-step-body">
+              <strong>
+                Judge qualified{qualify.mode === "deep" ? " · deep research" : qualify.mode === "deterministic" ? " · offline profile" : " · researched the role"}
+              </strong>
+              {qualify.summary && <small>{qualify.summary}</small>}
+              {qualify.sourceCount > 0 && <small>{qualify.sourceCount} source{qualify.sourceCount === 1 ? "" : "s"} cited</small>}
+            </span>
+          </li>
+        )}
+        {tailored && (
+          <li className="assay-step pass assay-step-qualify">
+            <span className="assay-step-icon" aria-hidden="true">
+              <Check size={15} />
+            </span>
+            <span className="assay-step-body">
+              <strong>Built {tailored.itemCount} tailored probe{tailored.itemCount === 1 ? "" : "s"}</strong>
+              {tailored.competencies.length > 0 && <small>{tailored.competencies.join(" · ")}</small>}
+            </span>
+          </li>
+        )}
         {visible.length === 0 && (
           <li className="assay-step pending">
             <span className="assay-step-icon spin" aria-hidden="true">

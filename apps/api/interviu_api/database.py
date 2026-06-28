@@ -689,6 +689,16 @@ def proof_bundle(run_id: str) -> dict[str, Any] | None:
         product_review = product_review_for_run(run_id)
     except Exception:
         product_review = None
+    # What the judge was qualified with (Phase 1-2): the persisted role brief and,
+    # for tailored runs, the generated exam pack — so the bundle proves not just
+    # the verdict but the bespoke rubric it was graded against.
+    role_brief = None
+    for event in reversed(events):
+        if event.get("event_type") == "role_qualified":
+            role_brief = event.get("payload")
+            break
+    tailored_exam_pack = _tailored_pack_payload(run.generated_pack_id)
+    qualification_status = scorecard.qualification_status if scorecard else None
     return {
         "schema": "interviu.proof_bundle.v1",
         "product": "Interviu",
@@ -698,16 +708,35 @@ def proof_bundle(run_id: str) -> dict[str, Any] | None:
         "candidate": candidate.model_dump(mode="json") if candidate else None,
         "scorecard": scorecard.model_dump(mode="json") if scorecard else None,
         "events": events,
+        "role_brief": role_brief,
+        "tailored_exam_pack": tailored_exam_pack,
         "summary": {
             "status": run.status,
             "certified": scorecard.certified if scorecard else False,
             "certificate_label": scorecard.certificate_label if scorecard else "Internal capability bar only",
             "tas_score": scorecard.trace_audit.tas_score if scorecard else None,
             "trace_status": scorecard.trace_audit.status if scorecard else "pending",
+            "qualification_status": qualification_status,
             "event_count": len(events),
         },
         "product_review": product_review.model_dump(mode="json") if product_review else None,
     }
+
+
+def _tailored_pack_payload(generated_pack_id: str | None) -> dict[str, Any] | None:
+    """The generated exam pack for a tailored run, if still in the registry.
+
+    Generated packs live in-process, so this resolves for a bundle fetched in the
+    same process as the run; after a cold restart it is simply absent.
+    """
+    if not generated_pack_id:
+        return None
+    try:
+        from .exam_packs import get_exam_pack
+
+        return get_exam_pack(generated_pack_id).model_dump(mode="json", by_alias=True)
+    except Exception:
+        return None
 
 
 @lru_cache(maxsize=1)

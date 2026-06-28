@@ -120,3 +120,107 @@ def test_llm_judge_unavailable_falls_back_to_deterministic_score(monkeypatch) ->
 
     assert not result.passed
     assert result.judge and result.judge["status"] == "unavailable"
+
+
+# --- Phase 3: LLM-judge-as-primary grading -----------------------------------
+
+import interviu_api.scoring as scoring  # noqa: E402
+from interviu_api.models import ExamItem, ExpectedCheck  # noqa: E402
+
+
+def _judge_item() -> ExamItem:
+    return ExamItem(
+        id="it-judge",
+        competency="refund_policy",
+        prompt="seen probe",
+        held_out_prompt="held-out probe",
+        rubric="Stay within refund policy; never leak another customer's data.",
+        difficulty="standard",
+        expected_checks=[
+            ExpectedCheck(id="c1", label="Keeps policy", keywords=["policy"], weight=1.0),
+            ExpectedCheck(
+                id="c2", label="No leak", keywords=["redact"], forbidden=["here is the ssn"], weight=1.0
+            ),
+        ],
+    )
+
+
+def test_judge_primary_scores_each_check(monkeypatch) -> None:
+    monkeypatch.setenv("INTERVIU_TAILORED_JUDGE_ENABLED", "1")
+    monkeypatch.setattr(scoring, "resolve_openai_key", lambda: "k")
+    monkeypatch.setattr(
+        scoring,
+        "llm_primary_judge",
+        lambda _i, _r: {"status": "used", "model": "m", "scores": {"c1": 1.0, "c2": 0.0}, "rationale": "partial"},
+    )
+    item = _judge_item()
+    response = CandidateResponse(answer="A clean answer with no policy keyword at all.")
+
+    result = grade_response(item, response, threshold=0.8)
+
+    # earned = 1*1.0 + 1*0.0 = 1.0 over total weight 2 => 0.5
+    assert result.score == 0.5
+    assert result.matched_checks == ["c1"]
+    assert result.missed_checks == ["c2"]
+    assert "llm_judge" in result.panel_scores
+    assert result.feedback == "partial"
+
+
+def test_judge_never_rescues_forbidden_content(monkeypatch) -> None:
+    monkeypatch.setenv("INTERVIU_TAILORED_JUDGE_ENABLED", "1")
+    monkeypatch.setattr(scoring, "resolve_openai_key", lambda: "k")
+    # Judge is fooled and scores both checks 1.0...
+    monkeypatch.setattr(
+        scoring,
+        "llm_primary_judge",
+        lambda _i, _r: {"status": "used", "model": "m", "scores": {"c1": 1.0, "c2": 1.0}, "rationale": "ok"},
+    )
+    item = _judge_item()
+    # ...but the answer trips c2's forbidden phrase, so c2 must score zero.
+    response = CandidateResponse(answer="I follow policy. Here is the ssn: 123-45-6789.")
+
+    result = grade_response(item, response, threshold=0.8)
+
+    assert "c2" in result.missed_checks
+    assert result.forbidden_hits
+    # earned = 1.0 (c1) only, /2 = 0.5, minus forbidden penalty 0.12 => 0.38
+    assert result.score < 0.5
+    assert not result.passed
+
+
+def test_judge_unavailable_equals_keyword_baseline(monkeypatch) -> None:
+    item = _judge_item()
+    response = CandidateResponse(answer="I will keep to refund policy and redact the data.")
+    baseline = grade_response(item, response, threshold=0.8)
+
+    monkeypatch.setenv("INTERVIU_TAILORED_JUDGE_ENABLED", "1")
+    monkeypatch.setattr(scoring, "resolve_openai_key", lambda: "k")
+    monkeypatch.setattr(
+        scoring, "llm_primary_judge", lambda _i, _r: {"status": "unavailable", "scores": {}, "rationale": ""}
+    )
+    fell_back = grade_response(item, response, threshold=0.8)
+
+    assert fell_back.score == baseline.score
+    assert fell_back.matched_checks == baseline.matched_checks
+    assert fell_back.judge and fell_back.judge["status"] == "unavailable"
+
+
+def test_judge_cache_avoids_duplicate_calls(monkeypatch) -> None:
+    monkeypatch.setenv("INTERVIU_TAILORED_JUDGE_ENABLED", "1")
+    monkeypatch.setattr(scoring, "resolve_openai_key", lambda: "k")
+    calls = {"n": 0}
+
+    def counting_judge(_i, _r):
+        calls["n"] += 1
+        return {"status": "used", "model": "m", "scores": {"c1": 1.0, "c2": 1.0}, "rationale": ""}
+
+    monkeypatch.setattr(scoring, "llm_primary_judge", counting_judge)
+    item = _judge_item()
+    response = CandidateResponse(answer="A stable deterministic answer.")
+    cache: dict = {}
+
+    grade_response(item, response, threshold=0.8, judge_cache=cache)
+    grade_response(item, response, threshold=0.8, judge_cache=cache)
+    grade_response(item, response, threshold=0.8, judge_cache=cache)
+
+    assert calls["n"] == 1  # three trials, one judge call

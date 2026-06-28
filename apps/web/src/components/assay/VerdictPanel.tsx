@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { CheckCircle2, AlertTriangle, XCircle, ArrowRight, RotateCcw, PanelRightOpen, LayoutDashboard } from "lucide-react";
 import { deriveVerdict, deriveFixes, deriveCategoryScores, type FixSeverity } from "@/lib/assay";
+import RoleBriefCard from "@/components/assay/RoleBriefCard";
 import type { Scorecard, AgentSpec } from "@/types/interviu";
 
 /**
@@ -93,6 +94,8 @@ export function VerdictPanel({ scorecard, agentSpec, agentName, onViewTrace, onT
           <PanelRightOpen size={16} /> Open full trace
         </button>
       </div>
+
+      <RoleBriefCard runId={scorecard.run_id} />
 
       <div className="assay-fixes">
         <h3 className="assay-section-label">What to fix</h3>

@@ -248,6 +248,45 @@ export function probeLabel(competency: string): string {
   return PROBE_VERB[competency] ?? `Probing ${labelize(competency)}`;
 }
 
+export type QualifySignal = {
+  summary: string;
+  mode: "fast" | "deep" | "deterministic";
+  status: string;
+  sourceCount: number;
+};
+
+/**
+ * The judge-qualification lead-in: did this run research what the agent should
+ * be before grading? Returns null when the stage was off (no event), so the
+ * default flow is unchanged.
+ */
+export function roleQualified(events: RunEvent[]): QualifySignal | null {
+  const event = events.find((item) => item.event_type === "role_qualified");
+  if (!event) return null;
+  const payload = event.payload as Record<string, unknown>;
+  const sources = Array.isArray(payload.sources) ? payload.sources : [];
+  return {
+    summary: typeof payload.role_summary === "string" ? payload.role_summary : "",
+    mode: (payload.mode as QualifySignal["mode"]) ?? "fast",
+    status: typeof payload.status === "string" ? payload.status : "ok",
+    sourceCount: sources.length
+  };
+}
+
+export type TailoredExamSignal = { itemCount: number; competencies: string[] };
+
+/** Did this run build bespoke probes from the brief? Null when it used a static pack. */
+export function tailoredExam(events: RunEvent[]): TailoredExamSignal | null {
+  const event = events.find((item) => item.event_type === "tailored_exam_generated");
+  if (!event) return null;
+  const payload = event.payload as Record<string, unknown>;
+  const comps = Array.isArray(payload.competencies) ? (payload.competencies as string[]) : [];
+  return {
+    itemCount: typeof payload.item_count === "number" ? payload.item_count : comps.length,
+    competencies: comps
+  };
+}
+
 /** Collapse the raw event stream into ordered, human-readable judging steps. */
 export function liveSteps(events: RunEvent[]): LiveStep[] {
   const steps: LiveStep[] = [];

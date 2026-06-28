@@ -114,6 +114,8 @@ export type RunRecord = {
   pass_count?: number;
   total_count?: number;
   degraded?: boolean;
+  qualification_status?: "tailored" | "deterministic" | "partial";
+  role_brief_summary?: string | null;
 };
 
 export type RunEvent = {
@@ -166,8 +168,37 @@ export type Scorecard = {
   prior_run_id: string | null;
   degraded?: boolean;
   degraded_reason?: string | null;
+  qualification_status?: "tailored" | "deterministic" | "partial";
+  role_brief_summary?: string | null;
   semantic_judge_used?: boolean;
   semantic_judge_summary?: Record<string, unknown>;
+};
+
+export type BriefCompetency = {
+  key: string;
+  label: string;
+  why?: string;
+  difficulty: "intro" | "standard" | "adversarial";
+  seed_keywords?: string[];
+  forbidden?: string[];
+};
+
+export type RoleBrief = {
+  schema: "assay.role_brief.v1";
+  run_id: string;
+  candidate_id: string;
+  candidate_name: string;
+  mode: "fast" | "deep" | "deterministic";
+  status: "ok" | "unavailable" | "error" | "deterministic";
+  model?: string | null;
+  role_summary: string;
+  should_do: string[];
+  must_not_do: string[];
+  risks: string[];
+  competencies: BriefCompetency[];
+  sources: Array<{ title: string; url: string }>;
+  message?: string | null;
+  generated_at: string;
 };
 
 export type ProductReviewer = {
@@ -328,8 +359,11 @@ export type ProofBundle = {
     certificate_label: string;
     tas_score?: number | null;
     trace_status: string;
+    qualification_status?: "tailored" | "deterministic" | "partial" | null;
     event_count: number;
   };
+  role_brief?: RoleBrief | null;
+  tailored_exam_pack?: ExamPack | null;
   database: DatabaseHealth | Record<string, unknown>;
   connectors: Connector[];
   connector_probes: ConnectorProbe[];

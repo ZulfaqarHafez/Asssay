@@ -26,7 +26,7 @@ class _FakeAudit:
         )
 
 
-def _failing_grade(item, response, threshold):
+def _failing_grade(item, response, threshold, **_kwargs):
     from interviu_api.scoring import GradeResult
 
     return GradeResult(
@@ -40,7 +40,7 @@ def _failing_grade(item, response, threshold):
     )
 
 
-def _passing_grade(item, response, threshold):
+def _passing_grade(item, response, threshold, **_kwargs):
     from interviu_api.scoring import GradeResult
 
     return GradeResult(
