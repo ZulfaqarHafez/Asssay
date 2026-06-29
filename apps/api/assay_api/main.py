@@ -63,12 +63,12 @@ _DEFAULT_CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
 def _cors_origins() -> list[str]:
-    """Resolve the CORS allowlist from ``INTERVIU_CORS_ORIGINS`` (comma-separated).
+    """Resolve the CORS allowlist from ``ASSAY_CORS_ORIGINS`` (comma-separated).
 
     Defaults to the local dev origins so the web app keeps working when unset.
     """
 
-    raw = os.environ.get("INTERVIU_CORS_ORIGINS", "").strip()
+    raw = os.environ.get("ASSAY_CORS_ORIGINS", "").strip()
     if not raw:
         return list(_DEFAULT_CORS_ORIGINS)
     origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
@@ -77,10 +77,10 @@ def _cors_origins() -> list[str]:
 
 # In dev (no explicit allowlist) the web server auto-scans for a free port, so it
 # may land on any localhost port — allow the whole local range via regex. When
-# INTERVIU_CORS_ORIGINS is set (production), this stays None and the explicit
+# ASSAY_CORS_ORIGINS is set (production), this stays None and the explicit
 # allowlist is the only thing honored.
 def _cors_origin_regex() -> str | None:
-    if os.environ.get("INTERVIU_CORS_ORIGINS", "").strip():
+    if os.environ.get("ASSAY_CORS_ORIGINS", "").strip():
         return None
     return r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
@@ -111,10 +111,10 @@ class ExamPackImportFileRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-# Auth is applied globally (opt-in via INTERVIU_API_KEYS). /health and
+# Auth is applied globally (opt-in via ASSAY_API_KEYS). /health and
 # /health/database are exempted below so probes never require a key.
 app = FastAPI(
-    title="Interviu API",
+    title="Assay API",
     version="0.1.0",
     dependencies=[Depends(require_api_key), Depends(require_tenant)],
 )
@@ -143,12 +143,12 @@ def _is_local_host(value: str | None) -> bool:
 
 
 def _deployed_signal_present() -> bool:
-    env = os.environ.get("INTERVIU_ENV", "").strip().lower()
+    env = os.environ.get("ASSAY_ENV", "").strip().lower()
     if env in {"prod", "production", "staging"}:
         return True
     if os.environ.get("PORT") and env not in {"dev", "development", "local", "test"}:
         return True
-    if not _is_local_host(os.environ.get("INTERVIU_HOST")) and not os.environ.get("INTERVIU_CORS_ORIGINS", "").strip():
+    if not _is_local_host(os.environ.get("ASSAY_HOST")) and not os.environ.get("ASSAY_CORS_ORIGINS", "").strip():
         return True
     return False
 
@@ -161,8 +161,8 @@ def production_hardening_findings() -> list[str]:
         findings.append(f"{API_KEYS_ENV} is unset")
     if tenant_required() and not configured_api_keys():
         findings.append(f"{REQUIRE_TENANT_ENV} requires API keys")
-    if not os.environ.get("INTERVIU_CORS_ORIGINS", "").strip():
-        findings.append("INTERVIU_CORS_ORIGINS is unset")
+    if not os.environ.get("ASSAY_CORS_ORIGINS", "").strip():
+        findings.append("ASSAY_CORS_ORIGINS is unset")
     if not rate_limiting_enabled():
         findings.append(f"{RATE_LIMIT_ENABLED_ENV} disables rate limiting")
     return findings
@@ -173,7 +173,7 @@ def _check_production_hardening() -> None:
     if not findings:
         return
     message = "Production hardening is incomplete: " + "; ".join(findings)
-    if _truthy(os.environ.get("INTERVIU_REQUIRE_HARDENING")):
+    if _truthy(os.environ.get("ASSAY_REQUIRE_HARDENING")):
         raise RuntimeError(message)
     logger.warning(message)
 
@@ -223,7 +223,7 @@ def startup() -> None:
 def health() -> dict[str, object]:
     return {
         "ok": True,
-        "service": "interviu-api",
+        "service": "assay-api",
         "database_backend": database_backend_name(),
         "tracerazor_importable": _load_tracerazor_client() is not None,
         "openai_configured": bool(resolve_openai_key()),
@@ -392,6 +392,8 @@ def runs() -> list[dict]:
                 item["pass_count"] = sum(1 for v in passes.values() if v)
                 item["total_count"] = len(passes)
                 item["degraded"] = scorecard.degraded
+                item["qualification_status"] = scorecard.qualification_status
+                item["role_brief_summary"] = scorecard.role_brief_summary
         items.append(item)
     return items
 
@@ -412,10 +414,10 @@ def create_run(payload: RunCreate) -> dict:
         exam_pack_id = analyze_job_scope(payload.job_scope).recommended_exam_pack_id
 
     # Live (OpenAI) candidates fire k x items x 2 LLM calls per run; on a
-    # rate-limited free-tier key that is slow. INTERVIU_LIVE_K caps attempts for
+    # rate-limited free-tier key that is slow. ASSAY_LIVE_K caps attempts for
     # live candidates only (mock/deterministic runs and tests are untouched).
     effective_k = payload.k
-    live_k_env = os.environ.get("INTERVIU_LIVE_K", "").strip()
+    live_k_env = os.environ.get("ASSAY_LIVE_K", "").strip()
     if live_k_env:
         candidate = get_candidate(payload.candidate_id)
         if candidate is not None and candidate.adapter_type == "openai-compatible":
@@ -465,6 +467,21 @@ def run_role_analysis(run_id: str) -> dict:
     if payload is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return payload
+
+
+@app.get("/runs/{run_id}/role-brief")
+def run_role_brief(run_id: str) -> dict:
+    """The role brief the judge was qualified with, if the run produced one.
+
+    Reads the persisted ``role_qualified`` event rather than re-running research,
+    so it is free and reflects exactly what graded this run.
+    """
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    for event in reversed(list_events(run_id)):
+        if event.event_type == "role_qualified":
+            return event.payload
+    raise HTTPException(status_code=404, detail="Role brief not found for this run")
 
 
 @app.get("/runs/{run_id}/events")

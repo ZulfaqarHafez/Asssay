@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, AlertTriangle, Circle, Loader2, FlaskConical } from "lucide-react";
 import { useRuns, useCandidates } from "@/lib/queries";
 import { VialArt } from "@/components/ui/EmptyArt";
-import type { RunRecord } from "@/types/interviu";
+import type { RunRecord } from "@/types/assay";
 
 /**
  * Experiments — the run history of the workspace. Every run an agent has been
@@ -84,7 +84,13 @@ function RunRow({ run, agentName }: { run: RunRecord; agentName: string }) {
         <Link href={`/runs/${run.id}`} className="ws-cell-strong">{agentName}</Link>
         <div className="ws-cell-sub mono">{run.id}</div>
       </td>
-      <td>{run.exam_pack_id}</td>
+      <td>
+        {run.qualification_status === "tailored" ? (
+          <span className="ws-tag" title={run.role_brief_summary ?? "Probes tailored to this agent"}>Tailored</span>
+        ) : (
+          run.exam_pack_id
+        )}
+      </td>
       <td>
         {verdict === "ship" ? (
           <span className="ws-verdict ship"><CheckCircle2 size={13} /> Ship</span>

@@ -36,7 +36,7 @@ export type AgentIntakeResponse = {
 };
 
 export type ExamPack = {
-  schema?: "interviu.exam_pack.v1";
+  schema?: "assay.exam_pack.v1";
   id: string;
   name: string;
   simulator_model: string;
@@ -59,12 +59,12 @@ export type ExamPack = {
 };
 
 export type ExamPackExport = {
-  schema: "interviu.exam_pack.v1";
+  schema: "assay.exam_pack.v1";
   pack: ExamPack;
   huggingface: {
     repo_type: "dataset";
     files: {
-      "data/interviu_exam_rows.jsonl": Array<Record<string, unknown>>;
+      "data/assay_exam_rows.jsonl": Array<Record<string, unknown>>;
       "README.md": string;
     };
     suggested_commands: string[];
@@ -114,6 +114,8 @@ export type RunRecord = {
   pass_count?: number;
   total_count?: number;
   degraded?: boolean;
+  qualification_status?: "tailored" | "deterministic" | "partial";
+  role_brief_summary?: string | null;
 };
 
 export type RunEvent = {
@@ -166,8 +168,37 @@ export type Scorecard = {
   prior_run_id: string | null;
   degraded?: boolean;
   degraded_reason?: string | null;
+  qualification_status?: "tailored" | "deterministic" | "partial";
+  role_brief_summary?: string | null;
   semantic_judge_used?: boolean;
   semantic_judge_summary?: Record<string, unknown>;
+};
+
+export type BriefCompetency = {
+  key: string;
+  label: string;
+  why?: string;
+  difficulty: "intro" | "standard" | "adversarial";
+  seed_keywords?: string[];
+  forbidden?: string[];
+};
+
+export type RoleBrief = {
+  schema: "assay.role_brief.v1";
+  run_id: string;
+  candidate_id: string;
+  candidate_name: string;
+  mode: "fast" | "deep" | "deterministic";
+  status: "ok" | "unavailable" | "error" | "deterministic";
+  model?: string | null;
+  role_summary: string;
+  should_do: string[];
+  must_not_do: string[];
+  risks: string[];
+  competencies: BriefCompetency[];
+  sources: Array<{ title: string; url: string }>;
+  message?: string | null;
+  generated_at: string;
 };
 
 export type ProductReviewer = {
@@ -182,7 +213,7 @@ export type ProductReviewer = {
 };
 
 export type ProductReview = {
-  schema: "interviu.product_review.v1";
+  schema: "assay.product_review.v1";
   run_id: string;
   generated_at: string;
   reviewers: ProductReviewer[];
@@ -208,7 +239,7 @@ export type SubAgentSpec = {
 };
 
 export type AgentSpec = {
-  schema: "interviu.agent_spec.v1";
+  schema: "assay.agent_spec.v1";
   run_id: string;
   candidate_id: string;
   candidate_name: string;
@@ -293,7 +324,7 @@ export type CompetencyRequirement = {
 };
 
 export type RoleAnalysis = {
-  schema: "interviu.role_analysis.v1";
+  schema: "assay.role_analysis.v1";
   job_scope: JobScope;
   recommended_exam_pack_id: string;
   supplemental_pack_ids: string[];
@@ -314,8 +345,8 @@ export type DatabaseHealth = {
 };
 
 export type ProofBundle = {
-  schema: "interviu.proof_bundle.v1";
-  product: "Interviu";
+  schema: "assay.proof_bundle.v1";
+  product: "Assay";
   tenant_id?: string;
   generated_at: string;
   run: RunRecord;
@@ -328,8 +359,11 @@ export type ProofBundle = {
     certificate_label: string;
     tas_score?: number | null;
     trace_status: string;
+    qualification_status?: "tailored" | "deterministic" | "partial" | null;
     event_count: number;
   };
+  role_brief?: RoleBrief | null;
+  tailored_exam_pack?: ExamPack | null;
   database: DatabaseHealth | Record<string, unknown>;
   connectors: Connector[];
   connector_probes: ConnectorProbe[];
@@ -381,7 +415,7 @@ export type CompetencyProgress = {
 };
 
 export type CandidateProgress = {
-  schema: "interviu.candidate_progress.v1";
+  schema: "assay.candidate_progress.v1";
   candidate_id: string;
   candidate_name: string;
   run_count: number;
@@ -405,7 +439,7 @@ export type CompetencyComparison = {
 };
 
 export type RunComparison = {
-  schema: "interviu.run_comparison.v1";
+  schema: "assay.run_comparison.v1";
   run_id: string;
   baseline_run_id: string | null;
   candidate_id: string;

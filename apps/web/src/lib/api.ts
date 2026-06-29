@@ -1,4 +1,4 @@
-import type { AgentIntakeResponse, AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, CandidateProgress, Connector, ConnectorProbe, DatabaseHealth, DiagnosticLesson, ExamPack, ExamPackExport, ExamPackFileExport, Health, JobScope, ProductReview, ProofBundle, RoleAnalysis, RunComparison, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/interviu";
+import type { AgentIntakeResponse, AgentResearch, AgentSpec, AgentSpecFileExport, CandidateConfig, CandidateProgress, Connector, ConnectorProbe, DatabaseHealth, DiagnosticLesson, ExamPack, ExamPackExport, ExamPackFileExport, Health, JobScope, ProductReview, ProofBundle, RoleAnalysis, RoleBrief, RunComparison, RunEvent, RunRecord, Scorecard, TracePayload } from "@/types/assay";
 
 function apiBaseUrl() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
@@ -29,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const interviuApi = {
+export const assayApi = {
   health: () => request<Health>("/health"),
   databaseHealth: () => request<DatabaseHealth>("/health/database"),
   examPacks: () => request<ExamPack[]>("/exam-packs"),
@@ -86,6 +86,7 @@ export const interviuApi = {
       body: JSON.stringify({ raw_text: rawText, extract, override_pack_id: overridePackId })
     }),
   runRoleAnalysis: (runId: string) => request<RoleAnalysis>(`/runs/${runId}/role-analysis`),
+  roleBrief: (runId: string) => request<RoleBrief>(`/runs/${runId}/role-brief`),
   candidateProgress: (candidateId: string) =>
     request<CandidateProgress>(`/candidates/${candidateId}/progress`),
   candidateLessons: (candidateId: string, examPackId?: string) =>
