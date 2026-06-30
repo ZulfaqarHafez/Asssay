@@ -25,12 +25,15 @@ Shipped on `claude/product-separation-ui-taczio`:
   fragmenting it further trades clarity for churn (see the strategy's
   anti-over-splitting caution).
 
-The remaining seam is **Seam B (per-product table prefixes)**, captured below as
-a plan rather than executed unattended: it touches the live data layer and
-migrations for modest incremental benefit. This mirrors the strategy doc's
-caution — *don't over-split a pre-MVP; promote a product to its own deploy only
-when it earns its own customer.* It should be done with review, not in an
-autonomous loop.
+**Seam B (per-product table prefixes) — config layer done.** The Supabase table
+resolver now namespaces each logical table by product
+(`resolve_supabase_tables`), with per-product prefix overrides
+(`ASSAY_SUPABASE_PREFIX_AGENTS|RUNS|DIAGNOSTICS`). Defaults are unchanged
+(shared `assay_*`), so this is opt-in configuration that moves no data. The
+actual physical data migration to per-product tables stays **opt-in and
+documented** (`docs/supabase.md#per-product-table-namespaces`) — run it with
+review + a backfill/rollback plan when a product actually needs its own
+namespace, per the strategy's *don't over-split a pre-MVP* caution.
 
 ## Seam A — Orchestrator service boundaries — DONE
 
@@ -74,7 +77,10 @@ emitter. A true service split has to make that state an explicit dependency.
 - All existing run/learning-loop/concurrency tests pass unchanged.
 - `start()` reads as a sequence of named service calls, no inline stage logic.
 
-## Seam B — Per-product table prefixes
+## Seam B — Per-product table prefixes — CONFIG DONE (data migration opt-in)
+
+> The resolver + per-product prefix overrides are shipped and tested. Only the
+> live data migration remains opt-in; the staged plan below is the runbook for it.
 
 ### Assessment
 
@@ -106,8 +112,9 @@ deployment. That is a live-data change and must not run unattended.
 
 ## Recommendation
 
-Seam A is complete (recorder, contracts, diagnostics, exam-prep), leaving the
-grading core in place. **Hold Seam B** (per-product table prefixes) until there
-is a concrete need — a second product actually shipping on its own — per the
-pre-MVP caution. It is a live-data + migration change and should go through
-review with a backfill/rollback plan, not an autonomous loop.
+Both seams' code is shipped: Seam A (recorder, contracts, diagnostics, exam-prep,
+grading core retained) and Seam B's config layer (per-product table resolver +
+prefix overrides, defaults unchanged). The only remaining step is the **opt-in
+live data migration** for Seam B — run it with review and a backfill/rollback
+plan when a product actually needs its own namespace, not before. Part B is
+otherwise complete.
