@@ -2,23 +2,40 @@
 
 ## Status
 
-The low-risk Part B seams are **done and shipped** on
-`claude/product-separation-ui-taczio`:
+Shipped on `claude/product-separation-ui-taczio`:
 
 - API routes split into per-surface routers (`assay_api/routers/`).
 - Models split into a per-product package (`assay_api/models/`).
 - Frontend query layer split into per-product modules (`web/src/lib/queries/`).
+- **Seam A (orchestrator decomposition) — done**, in four behavior-preserving,
+  fully test-covered increments:
+  - `RunRecorder` extracted (`assay_api/run_recorder.py`) — event emission +
+    trace-step capture.
+  - Stage result contracts (`PackResolution`, `PriorDiagnostics`,
+    `RunItemsResult`).
+  - Diagnostic Library extracted (`assay_api/diagnostics.py`) — the closed
+    learning loop.
+  - Exam-prep stage extracted (`assay_api/exam_prep.py`) — qualification + pack
+    resolution.
 
-Each was a behavior-preserving "new modules + re-export" change, fully test-covered.
+  `RunOrchestrator.start()` now reads as thin glue over named stages and the
+  orchestrator shrank from 718 to ~415 lines. The grading core
+  (`_run_items` / `_ask_candidate` / `_grade` / `_assemble_scorecard`) was
+  **intentionally left in place** — it is the cohesive heart of the run loop and
+  fragmenting it further trades clarity for churn (see the strategy's
+  anti-over-splitting caution).
 
-The remaining two seams are **Tier-3 (hard)** and are captured here as a plan
-rather than executed unattended, because they touch the most load-bearing parts
-of the system (the run pipeline and the live data layer) for modest incremental
-benefit. This mirrors the strategy doc's own caution: *don't over-split a
-pre-MVP; promote a product to its own deploy only when it earns its own
-customer.* These should be done with review, not in an autonomous loop.
+The remaining seam is **Seam B (per-product table prefixes)**, captured below as
+a plan rather than executed unattended: it touches the live data layer and
+migrations for modest incremental benefit. This mirrors the strategy doc's
+caution — *don't over-split a pre-MVP; promote a product to its own deploy only
+when it earns its own customer.* It should be done with review, not in an
+autonomous loop.
 
-## Seam A — Orchestrator service boundaries
+## Seam A — Orchestrator service boundaries — DONE
+
+> Completed as described below (recorder → contracts → diagnostics → exam-prep),
+> minus the grading core which was intentionally retained. Kept for the record.
 
 ### Assessment
 
@@ -89,6 +106,8 @@ deployment. That is a live-data change and must not run unattended.
 
 ## Recommendation
 
-Do Seam A step 1 (`RunRecorder`) first as a small, reviewable PR — it is the
-safest real progress. Hold steps 2–3 and all of Seam B until there is a concrete
-need (a second product actually shipping on its own), per the pre-MVP caution.
+Seam A is complete (recorder, contracts, diagnostics, exam-prep), leaving the
+grading core in place. **Hold Seam B** (per-product table prefixes) until there
+is a concrete need — a second product actually shipping on its own — per the
+pre-MVP caution. It is a live-data + migration change and should go through
+review with a backfill/rollback plan, not an autonomous loop.
