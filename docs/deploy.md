@@ -31,11 +31,22 @@ npx vercel --prod     # production
 The API holds server-only secrets (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
 `TRACERAZOR_BIN`). Pick one of:
 
-**Option A — Vercel Python Functions.** `apps/api/vercel.json` rewrites every path to
-`apps/api/api/index.py`, which re-exports the FastAPI app (`from assay_api.main import app`).
-In Vercel: **Add New… → Project → import this repo**, set **Root Directory: `apps/api`**
-(Vercel reads `requirements.txt` there and runs the ASGI app). Set the env vars below in the
-project settings.
+**Option A — Vercel Python Functions.** Vercel deploys the FastAPI app as a single function.
+`apps/api/api/index.py` re-exports the app (`from assay_api.main import app`) and
+`apps/api/pyproject.toml` configures the deploy:
+
+- `[tool.vercel].entrypoint = "api.index:app"` — **required**, because several files export
+  `app` (the entrypoint, `assay_api/main.py`, and the test modules), so Vercel's FastAPI
+  auto-detection can't pick one and fails the build (~2s, "No FastAPI entrypoint found") without it.
+- `[project].dependencies` (kept in sync with `requirements.txt`) — Vercel installs deps with
+  `uv` from this, and `[tool.uv] package = false` stops uv trying to build the repo as a package.
+- `apps/api/.vercelignore` drops `tests/` + local db files from the bundle.
+
+In Vercel: **Add New… → Project → import this repo**, then in **Settings → Build & Deployment**
+set **Root Directory: `apps/api`** — this is **load-bearing**: git-triggered deploys run from the
+repo root by default, which (a) can't import `assay_api` from `api/index.py` and (b) won't find
+`apps/api/pyproject.toml`. With the root unset, deploys fail; with it set to `apps/api`, they pass.
+(A `vercel deploy` from inside `apps/api` works regardless, since the CLI uploads that dir as the root.)
 
 > **Serverless caveat:** `POST /runs/{id}/start` runs the whole exam synchronously, so a
 > *live* OpenAI run can exceed Vercel's function time limit. **Demo runs** (no key, or the
