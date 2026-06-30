@@ -4,7 +4,7 @@ import asyncio
 import os
 from collections import defaultdict
 from statistics import mean
-from typing import Any
+from typing import Any, NamedTuple
 
 from .adapters import CandidateAdapterError, adapter_for
 from .database import (
@@ -53,6 +53,31 @@ def _run_concurrency() -> int:
     except ValueError:
         value = 5
     return max(1, min(16, value))
+
+
+class PackResolution(NamedTuple):
+    """Outcome of resolving which exam pack a run grades against."""
+
+    pack: Any
+    qualification_status: str
+
+
+class PriorDiagnostics(NamedTuple):
+    """Lessons retained from this candidate's prior runs, seeded into a run."""
+
+    seed_lessons: list[str]
+    by_competency: dict[str, list[DiagnosticLesson]]
+    prior_run_id: str | None
+
+
+class RunItemsResult(NamedTuple):
+    """Per-competency scores and grading signals from executing the exam items."""
+
+    seen_scores: dict[str, list[float]]
+    held_scores: dict[str, list[float]]
+    panel_results: list[dict[str, float]]
+    lesson_feedback: dict[str, str]
+    judge_results: list[dict[str, Any]]
 
 
 class RunOrchestrator:
@@ -176,7 +201,7 @@ class RunOrchestrator:
         self._recorder.event(run.id, "system", "role_qualified", brief.model_dump(mode="json", by_alias=True))
         return brief
 
-    def _resolve_pack(self, run: RunRecord, role_brief: Any) -> tuple[Any, str]:
+    def _resolve_pack(self, run: RunRecord, role_brief: Any) -> PackResolution:
         """Pick the exam pack for this run: a tailored pack synthesized from the
         brief, or the run's already-selected static pack.
 
@@ -186,7 +211,7 @@ class RunOrchestrator:
         consistent. Synthesis failures fall back to the static pack.
         """
         if role_brief is None:
-            return get_exam_pack(run.exam_pack_id), "deterministic"
+            return PackResolution(get_exam_pack(run.exam_pack_id), "deterministic")
         from .exam_synthesis import synthesize_exam_pack
 
         pack, status = synthesize_exam_pack(role_brief, run)
@@ -204,7 +229,7 @@ class RunOrchestrator:
                     "competencies": sorted({item.competency for item in pack.items}),
                 },
             )
-        return pack, status
+        return PackResolution(pack, status)
 
     # --- Diagnostic library (closed learning loop) -------------------------
 
@@ -213,7 +238,7 @@ class RunOrchestrator:
         run: RunRecord,
         candidate: CandidateConfig,
         pack: Any,
-    ) -> tuple[list[str], dict[str, list[DiagnosticLesson]], str | None]:
+    ) -> PriorDiagnostics:
         """Seed the run with active lessons retained from this candidate's
         prior runs on the same pack, grouped by competency for outcome tracking.
         """
@@ -224,7 +249,7 @@ class RunOrchestrator:
         for lesson in prior:
             by_comp[lesson.competency].append(lesson)
         seed = [f"{lesson.competency}: {lesson.text}" for lesson in prior]
-        return seed, by_comp, self._prior_run_id(run, candidate)
+        return PriorDiagnostics(seed, by_comp, self._prior_run_id(run, candidate))
 
     @staticmethod
     def _prior_run_id(run: RunRecord, candidate: CandidateConfig) -> str | None:
@@ -391,13 +416,7 @@ class RunOrchestrator:
         candidate: CandidateConfig,
         pack: Any,
         lessons: list[str],
-    ) -> tuple[
-        dict[str, list[float]],
-        dict[str, list[float]],
-        list[dict[str, float]],
-        dict[str, str],
-        list[dict[str, Any]],
-    ]:
+    ) -> RunItemsResult:
         seen_scores: dict[str, list[float]] = defaultdict(list)
         held_scores: dict[str, list[float]] = defaultdict(list)
         panel_results: list[dict[str, float]] = []
@@ -456,7 +475,7 @@ class RunOrchestrator:
                 self._recorder.event(run.id, "lesson_library", "lesson_added",
                             {"competency": item.competency, "lesson": lesson})
 
-        return seen_scores, held_scores, panel_results, lesson_feedback, judge_results
+        return RunItemsResult(seen_scores, held_scores, panel_results, lesson_feedback, judge_results)
 
     def _grade(
         self,
